@@ -27,7 +27,8 @@ main{padding:24px 32px 48px;max-width:1500px;margin:0 auto}
 .chart{position:relative;height:280px}.chart.s{height:220px}
 table{width:100%;border-collapse:collapse;font-size:13px}th{color:var(--mut);font-weight:500;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
 td{padding:8px 10px;border-bottom:1px solid #1a2130;white-space:nowrap}tr:hover td{background:#151b27}
-.scroll{max-height:420px;overflow:auto}.tag{padding:1px 8px;border-radius:6px;font-size:11px;font-weight:500}
+.scroll{max-height:420px;overflow:auto;scrollbar-width:thin;scrollbar-color:#2a3346 transparent}
+.scroll::-webkit-scrollbar{height:8px;width:8px}.scroll::-webkit-scrollbar-track{background:transparent}.scroll::-webkit-scrollbar-thumb{background:#2a3346;border-radius:4px}.tag{padding:1px 8px;border-radius:6px;font-size:11px;font-weight:500}
 .L{background:#12382a;color:var(--g)}.S{background:#3a1820;color:var(--r)}
 .dec{padding:10px 0;border-bottom:1px solid #1a2130}.dec .t{color:var(--mut);font-size:12px}.dec .a{font-size:12px;color:var(--b)}
 #err{display:none;background:#3a1820;border:1px solid var(--r);color:#ffd0d5;padding:14px 18px;border-radius:12px;margin-bottom:16px}
@@ -74,10 +75,9 @@ td{padding:8px 10px;border-bottom:1px solid #1a2130;white-space:nowrap}tr:hover 
 
   <section class="card" style="margin-bottom:16px"><h2>Açık pozisyonlar</h2><div class="scroll"><table id="tOpen"></table></div></section>
 
-  <section class="grid2">
-    <div class="card"><h2>İşlem geçmişi</h2><div class="scroll"><table id="tTr"></table></div></div>
-    <div class="card"><h2>Karar günlüğü</h2><div class="scroll" id="dec"></div></div>
-  </section>
+  <section class="card" style="margin-bottom:16px"><h2>İşlem geçmişi</h2><div class="scroll"><table id="tTr"></table></div></section>
+
+  <section class="card" style="margin-bottom:16px"><h2>Karar günlüğü</h2><div class="scroll" id="dec"></div></section>
 
   <section class="card"><h2>Strateji sürümleri</h2><div class="scroll"><table id="tVer"></table></div></section>
 </main>
