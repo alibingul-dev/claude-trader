@@ -12,17 +12,18 @@
 :root{--bg:#0b0e13;--panel:#121722;--panel2:#171d2a;--line:#232b3b;--tx:#e6e9ef;--mut:#8b93a7;--g:#2fd18b;--r:#ff5d6c;--a:#f5b544;--b:#5aa9ff}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.5 Inter,system-ui,sans-serif}
 .mono{font-family:'JetBrains Mono',monospace}
-header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;padding:28px 32px 18px;border-bottom:1px solid var(--line)}
+header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;padding:24px 0 18px;border-bottom:1px solid var(--line)}
+.left{min-width:0}
 h1{margin:0;font-size:20px;font-weight:600}h2{font-size:13px;font-weight:500;color:var(--mut);margin:0 0 12px;text-transform:uppercase;letter-spacing:.06em}
 .sub{color:var(--mut);font-size:13px}.pill{display:inline-block;padding:2px 10px;border-radius:99px;background:var(--panel2);border:1px solid var(--line);font-size:12px;margin-left:8px}
-main{padding:24px 0 48px;min-width:0}
+main{padding:24px 0 48px}
 .wrap{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:16px;max-width:1880px;margin:0 auto;padding:0 32px}
-aside{position:sticky;top:0;height:100vh;padding:24px 0;display:flex;flex-direction:column}
+aside{position:sticky;top:38px;height:calc(100vh - 38px);padding:16px 0;display:flex;flex-direction:column}
 aside .card{flex:1;display:flex;flex-direction:column;overflow:hidden}
 .feed{flex:1;overflow:hidden;position:relative;-webkit-mask-image:linear-gradient(#000 85%,transparent)}
 .feed .inner{will-change:transform}.feed.run .inner{animation:up var(--dur,60s) linear infinite}.feed:hover .inner{animation-play-state:paused}
 @keyframes up{to{transform:translateY(-50%)}}
-.ticker{overflow:hidden;border-bottom:1px solid var(--line);background:#0e1219;white-space:nowrap;-webkit-mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent)}
+.ticker{position:sticky;top:0;z-index:5;height:38px;overflow:hidden;border-bottom:1px solid var(--line);background:#0e1219;white-space:nowrap;-webkit-mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent)}
 .ticker .track{display:inline-block;padding:9px 0;animation:left var(--tdur,60s) linear infinite}.ticker:hover .track{animation-play-state:paused}
 @keyframes left{to{transform:translateX(-50%)}}
 .ti{display:inline-block;margin:0 22px;font-size:13px}.ti b{font-weight:600;margin-right:6px}.ti.sep{color:#2a3346}
@@ -49,6 +50,8 @@ td{padding:8px 10px;border-bottom:1px solid #1a2130;white-space:nowrap}tr:hover 
 </head>
 <body>
 <div class="ticker"><div class="track mono" id="tick">yükleniyor…</div></div>
+<div class="wrap">
+<div class="left">
 <header>
   <div>
     <h1>Claude Trader <span class="pill" id="ver">—</span></h1>
@@ -56,7 +59,6 @@ td{padding:8px 10px;border-bottom:1px solid #1a2130;white-space:nowrap}tr:hover 
   </div>
   <div class="sub mono" id="upd">yükleniyor…</div>
 </header>
-<div class="wrap">
 <main>
   <div id="err"></div>
 
@@ -92,6 +94,7 @@ td{padding:8px 10px;border-bottom:1px solid #1a2130;white-space:nowrap}tr:hover 
 
   <section class="card"><h2>Strateji sürümleri</h2><div class="scroll"><table id="tVer"></table></div></section>
 </main>
+</div>
 <aside><div class="card"><h2>Karar günlüğü</h2><div class="feed" id="feed"><div class="inner" id="dec"></div></div></div></aside>
 </div>
 <script>
