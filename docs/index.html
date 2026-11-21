@@ -267,8 +267,8 @@ function render(d) {
   let peak = st.startWallet; const dd = d.equity.map((e) => { peak = Math.max(peak, e.equity); return (e.equity / peak - 1) * 100; });
   const maxDd = dd.length ? Math.min(...dd) : 0;
   const k = [
-    ['İşlem', f(S.n, 0), 'adet'], ['Ort. kazanç', sg(S.avgW, 4), 'USDT', 1], ['Ort. kayıp', sg(S.avgL, 4), 'USDT', -1],
-    ['En iyi işlem', sg(S.bestT, 4), 'USDT', 1], ['En kötü işlem', sg(S.worstT, 4), 'USDT', -1], ['Max drawdown', f(maxDd, 2), '%', -1],
+    ['İşlem', f(S.n, 0), 'adet'], ['Ort. kazanç', sg(S.avgW, 4), 'USDT', S.avgW], ['Ort. kayıp', sg(S.avgL, 4), 'USDT', S.avgL],
+    ['En iyi işlem', sg(S.bestT, 4), 'USDT', S.bestT], ['En kötü işlem', sg(S.worstT, 4), 'USDT', S.worstT], ['Max drawdown', f(maxDd, 2), '%', -1],
     ['Margin başı ort. ROI', sg(S.roi, 1), '%', S.roi], ['Ort. tutma', f(S.hold, 0), 'dk'], ['En uzun kayıp serisi', f(S.worst, 0), 'işlem'],
     ['En uzun kazanç serisi', f(S.bestStreak, 0), 'işlem'], ['Toplam fee', f(-S.fees, 4), 'USDT', -1], ['Net funding', sg(S.fund, 4), 'USDT', S.fund],
   ];
