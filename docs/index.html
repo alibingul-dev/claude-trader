@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Claude Trader — Binance USDT-M Forward Test</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="config.js"></script>
+<style>
+:root{--bg:#0b0e13;--panel:#121722;--panel2:#171d2a;--line:#232b3b;--tx:#e6e9ef;--mut:#8b93a7;--g:#2fd18b;--r:#ff5d6c;--a:#f5b544;--b:#5aa9ff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.5 Inter,system-ui,sans-serif}
+.mono{font-family:'JetBrains Mono',monospace}
+header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;padding:28px 32px 18px;border-bottom:1px solid var(--line)}
+h1{margin:0;font-size:20px;font-weight:600}h2{font-size:13px;font-weight:500;color:var(--mut);margin:0 0 12px;text-transform:uppercase;letter-spacing:.06em}
+.sub{color:var(--mut);font-size:13px}.pill{display:inline-block;padding:2px 10px;border-radius:99px;background:var(--panel2);border:1px solid var(--line);font-size:12px;margin-left:8px}
+main{padding:24px 32px 48px;max-width:1500px;margin:0 auto}
+.hero{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:16px;margin-bottom:16px}
+.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;min-width:0}
+.dec div{white-space:normal}
+.big{font-size:34px;font-weight:600;letter-spacing:-.02em}.mid{font-size:22px;font-weight:600}
+.lbl{color:var(--mut);font-size:12px;margin-bottom:4px}.u{color:var(--mut);font-size:.55em;font-weight:500;margin-left:4px}
+.pos{color:var(--g)}.neg{color:var(--r)}
+.grid2{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px}
+.chart{position:relative;height:280px}.chart.s{height:220px}
+table{width:100%;border-collapse:collapse;font-size:13px}th{color:var(--mut);font-weight:500;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:8px 10px;border-bottom:1px solid #1a2130;white-space:nowrap}tr:hover td{background:#151b27}
+.scroll{max-height:420px;overflow:auto}.tag{padding:1px 8px;border-radius:6px;font-size:11px;font-weight:500}
+.L{background:#12382a;color:var(--g)}.S{background:#3a1820;color:var(--r)}
+.dec{padding:10px 0;border-bottom:1px solid #1a2130}.dec .t{color:var(--mut);font-size:12px}.dec .a{font-size:12px;color:var(--b)}
+#err{display:none;background:#3a1820;border:1px solid var(--r);color:#ffd0d5;padding:14px 18px;border-radius:12px;margin-bottom:16px}
+.bar{height:6px;border-radius:3px;background:var(--panel2);overflow:hidden;margin-top:8px}.bar>i{display:block;height:100%;background:var(--g)}
+@media(max-width:1100px){.hero,.grid2,.grid3{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Claude Trader <span class="pill" id="ver">—</span></h1>
+    <div class="sub">Binance USDT-M · intraday forward test · isolated margin · notional 6 USDT’den büyüyor · maks. güvenli kaldıraç</div>
+  </div>
+  <div class="sub mono" id="upd">yükleniyor…</div>
+</header>
+<main>
+  <div id="err"></div>
+
+  <section class="hero">
+    <div class="card"><div class="lbl">Net kâr</div><div class="big" id="kNet">—</div><div class="sub" id="kNetSub"></div></div>
+    <div class="card"><div class="lbl">Getiri</div><div class="big" id="kRet">—</div><div class="sub" id="kRetSub"></div></div>
+    <div class="card"><div class="lbl">Equity</div><div class="big" id="kEq">—</div><div class="sub" id="kEqSub"></div></div>
+    <div class="card"><div class="lbl">Profit factor</div><div class="big" id="kPf">—</div><div class="bar"><i id="kWsrBar" style="width:0"></i></div><div class="sub" id="kPfSub"></div></div>
+  </section>
+
+  <section class="kpis" id="kpis"></section>
+
+  <section class="grid2">
+    <div class="card"><h2>Equity eğrisi (USDT)</h2><div class="chart"><canvas id="cEq"></canvas></div></div>
+    <div class="card"><h2>Drawdown (%)</h2><div class="chart"><canvas id="cDd"></canvas></div></div>
+  </section>
+
+  <section class="grid3">
+    <div class="card"><h2>Günlük net PnL (USDT)</h2><div class="chart s"><canvas id="cDay"></canvas></div></div>
+    <div class="card"><h2>Coin bazında net PnL (USDT)</h2><div class="chart s"><canvas id="cSym"></canvas></div></div>
+    <div class="card"><h2>Saat bazında net PnL (USDT, TSİ)</h2><div class="chart s"><canvas id="cHour"></canvas></div></div>
+  </section>
+
+  <section class="grid3">
+    <div class="card"><h2>Long / Short net PnL (USDT)</h2><div class="chart s"><canvas id="cSide"></canvas></div></div>
+    <div class="card"><h2>Çıkış nedeni (adet)</h2><div class="chart s"><canvas id="cExit"></canvas></div></div>
+    <div class="card"><h2>İşlem başına net PnL (USDT)</h2><div class="chart s"><canvas id="cTr"></canvas></div></div>
+  </section>
+
+  <section class="card" style="margin-bottom:16px"><h2>Açık pozisyonlar</h2><div class="scroll"><table id="tOpen"></table></div></section>
+
+  <section class="grid2">
+    <div class="card"><h2>İşlem geçmişi</h2><div class="scroll"><table id="tTr"></table></div></div>
+    <div class="card"><h2>Karar günlüğü</h2><div class="scroll" id="dec"></div></div>
+  </section>
+
+  <section class="card"><h2>Strateji sürümleri</h2><div class="scroll"><table id="tVer"></table></div></section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const f = (x, d = 2) => x == null || !isFinite(x) ? '—' : Number(x).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d });
+const sg = (x, d = 2) => (x > 0 ? '+' : '') + f(x, d);
+const cls = (x) => x > 0 ? 'pos' : x < 0 ? 'neg' : '';
+const tsi = (ms) => new Date(ms).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+const dayKey = (ms) => new Date(ms).toLocaleDateString('sv-SE', { timeZone: 'Europe/Istanbul' });
+const hourTsi = (ms) => +new Date(ms).toLocaleString('en-GB', { timeZone: 'Europe/Istanbul', hour: '2-digit', hour12: false });
+Chart.defaults.color = '#8b93a7'; Chart.defaults.borderColor = '#1e2533'; Chart.defaults.font.family = 'Inter';
+const charts = {};
+function draw(id, cfg) { charts[id]?.destroy(); charts[id] = new Chart($(id), cfg); }
+const colorBy = (arr) => arr.map((v) => v >= 0 ? '#2fd18b' : '#ff5d6c');
+const barOpts = (unit, horizontal) => ({ indexAxis: horizontal ? 'y' : 'x', maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `${sg(c.raw, 4)} ${unit}` } } } });
+
+function stats(tr) {
+  const n = tr.length, w = tr.filter((t) => t.net > 0);
+  const gw = w.reduce((a, t) => a + t.net, 0), gl = -tr.filter((t) => t.net <= 0).reduce((a, t) => a + t.net, 0);
+  let s = 0, worst = 0, ws = 0, best = 0;
+  for (const t of tr) { if (t.net > 0) { ws++; s = 0; } else { s++; ws = 0; } worst = Math.max(worst, s); best = Math.max(best, ws); }
+  return { n, net: gw - gl, gw, gl, bsr: n ? w.length / n * 100 : null, wsr: gw + gl ? gw / (gw + gl) * 100 : null, pf: gl ? gw / gl : (gw ? Infinity : null),
+    avgW: w.length ? gw / w.length : null, avgL: n - w.length ? -gl / (n - w.length) : null, worst, bestStreak: best,
+    fees: tr.reduce((a, t) => a + t.feeIn + t.feeOut, 0), fund: tr.reduce((a, t) => a + t.funding, 0),
+    hold: n ? tr.reduce((a, t) => a + t.holdMin, 0) / n : null, roi: n ? tr.reduce((a, t) => a + t.roiMarginPct, 0) / n : null,
+    bestT: n ? Math.max(...tr.map((t) => t.net)) : null, worstT: n ? Math.min(...tr.map((t) => t.net)) : null };
+}
+
+function render(d) {
+  const st = d.state, tr = d.trades, S = stats(tr);
+  const eqLast = d.equity.length ? d.equity[d.equity.length - 1].equity : st.wallet;
+  const net = eqLast - st.startWallet, ret = net / st.startWallet * 100;
+  $('ver').textContent = `aktif strateji ${st.version}`;
+  $('upd').textContent = `son veri ${tsi(Date.parse(d.generated_utc))} TSİ · 5 dk’da bir yenilenir`;
+  $('kNet').innerHTML = `<span class="${cls(net)}">${sg(net, 4)}</span><span class="u">USDT</span>`;
+  $('kNetSub').textContent = `gerçekleşen ${sg(S.net, 4)} USDT · açık ${sg(eqLast - st.wallet, 4)} USDT`;
+  $('kRet').innerHTML = `<span class="${cls(ret)}">${sg(ret, 2)}</span><span class="u">%</span>`;
+  $('kRetSub').textContent = `başlangıç kasası ${f(st.startWallet)} USDT · ${f((Date.now() - st.createdAt) / 864e5, 1)} gün`;
+  $('kEq').innerHTML = `${f(eqLast, 4)}<span class="u">USDT</span>`;
+  $('kEqSub').textContent = `nakit ${f(st.wallet, 4)} USDT · ${d.open.length} açık pozisyon`;
+  $('kPf').innerHTML = S.pf == null ? '—' : (S.pf === Infinity ? '∞' : f(S.pf, 3));
+  $('kWsrBar').style.width = (S.wsr ?? 0) + '%';
+  $('kPfSub').textContent = `WSR ${f(S.wsr, 1)} % · BSR ${f(S.bsr, 1)} %`;
+
+  let peak = st.startWallet; const dd = d.equity.map((e) => { peak = Math.max(peak, e.equity); return (e.equity / peak - 1) * 100; });
+  const maxDd = dd.length ? Math.min(...dd) : 0;
+  const k = [
+    ['İşlem', f(S.n, 0), 'adet'], ['Ort. kazanç', sg(S.avgW, 4), 'USDT', 1], ['Ort. kayıp', sg(S.avgL, 4), 'USDT', -1],
+    ['En iyi işlem', sg(S.bestT, 4), 'USDT', 1], ['En kötü işlem', sg(S.worstT, 4), 'USDT', -1], ['Max drawdown', f(maxDd, 2), '%', -1],
+    ['Margin başı ort. ROI', sg(S.roi, 1), '%', S.roi], ['Ort. tutma', f(S.hold, 0), 'dk'], ['En uzun kayıp serisi', f(S.worst, 0), 'işlem'],
+    ['En uzun kazanç serisi', f(S.bestStreak, 0), 'işlem'], ['Toplam fee', f(-S.fees, 4), 'USDT', -1], ['Net funding', sg(S.fund, 4), 'USDT', S.fund],
+  ];
+  $('kpis').innerHTML = k.map(([l, v, u, c]) => `<div class="card"><div class="lbl">${l}</div><div class="mid ${c ? cls(c) : ''}">${v}<span class="u">${u}</span></div></div>`).join('');
+
+  const eqL = d.equity.map((e) => tsi(e.ts));
+  draw('cEq', { type: 'line', data: { labels: eqL, datasets: [
+    { label: 'Equity (USDT)', data: d.equity.map((e) => e.equity), borderColor: '#2fd18b', backgroundColor: 'rgba(47,209,139,.08)', fill: true, pointRadius: 0, tension: .25, borderWidth: 2 },
+    { label: 'Başlangıç (USDT)', data: d.equity.map(() => st.startWallet), borderColor: '#5a6378', borderDash: [4, 4], pointRadius: 0, borderWidth: 1 }] },
+    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${f(c.raw, 4)}` } } }, scales: { x: { ticks: { maxTicksLimit: 8 } } } } });
+  draw('cDd', { type: 'line', data: { labels: eqL, datasets: [{ data: dd, borderColor: '#ff5d6c', backgroundColor: 'rgba(255,93,108,.12)', fill: true, pointRadius: 0, borderWidth: 1.5 }] },
+    options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `${f(c.raw, 2)} %` } } }, scales: { x: { ticks: { maxTicksLimit: 6 } } } } });
+
+  const grp = (fn) => { const m = new Map(); for (const t of tr) { const key = fn(t); m.set(key, (m.get(key) || 0) + t.net); } return m; };
+  const day = grp((t) => dayKey(t.closedAt)); const dk = [...day.keys()].sort();
+  draw('cDay', { type: 'bar', data: { labels: dk, datasets: [{ data: dk.map((x) => day.get(x)), backgroundColor: colorBy(dk.map((x) => day.get(x))), borderRadius: 4 }] }, options: barOpts('USDT') });
+  const sym = [...grp((t) => t.symbol).entries()].sort((a, b) => b[1] - a[1]).slice(0, 12);
+  draw('cSym', { type: 'bar', data: { labels: sym.map((x) => x[0].replace('USDT', '')), datasets: [{ data: sym.map((x) => x[1]), backgroundColor: colorBy(sym.map((x) => x[1])), borderRadius: 4 }] }, options: barOpts('USDT', true) });
+  const hr = grp((t) => hourTsi(t.openedAt)); const hrs = [...Array(24).keys()];
+  draw('cHour', { type: 'bar', data: { labels: hrs.map((h) => String(h).padStart(2, '0')), datasets: [{ data: hrs.map((h) => hr.get(h) || 0), backgroundColor: colorBy(hrs.map((h) => hr.get(h) || 0)), borderRadius: 3 }] }, options: barOpts('USDT') });
+  const side = grp((t) => t.side);
+  draw('cSide', { type: 'bar', data: { labels: ['LONG', 'SHORT'], datasets: [{ data: [side.get('LONG') || 0, side.get('SHORT') || 0], backgroundColor: colorBy([side.get('LONG') || 0, side.get('SHORT') || 0]), borderRadius: 6 }] }, options: barOpts('USDT') });
+  const ex = new Map(); for (const t of tr) { const r = t.exitReason.startsWith('MANUEL') ? 'MANUEL' : t.exitReason; ex.set(r, (ex.get(r) || 0) + 1); }
+  draw('cExit', { type: 'doughnut', data: { labels: [...ex.keys()], datasets: [{ data: [...ex.values()], backgroundColor: ['#2fd18b', '#ff5d6c', '#f5b544', '#5aa9ff', '#a78bfa'], borderColor: '#121722', borderWidth: 3 }] },
+    options: { maintainAspectRatio: false, cutout: '62%', plugins: { legend: { position: 'right' }, tooltip: { callbacks: { label: (c) => `${c.label}: ${c.raw} adet` } } } } });
+  const lastT = tr.slice(-60);
+  draw('cTr', { type: 'bar', data: { labels: lastT.map((t) => t.id), datasets: [{ data: lastT.map((t) => t.net), backgroundColor: colorBy(lastT.map((t) => t.net)), borderRadius: 2 }] }, options: barOpts('USDT') });
+
+  $('tOpen').innerHTML = '<tr><th>ID</th><th>Coin</th><th>Yön</th><th>Kaldıraç</th><th>Giriş (USDT)</th><th>Son (USDT)</th><th>Stop (USDT)</th><th>TP (USDT)</th><th>Likidasyon (USDT)</th><th>Notional (USDT)</th><th>Margin (USDT)</th><th>Açık PnL (USDT)</th><th>MFE (%)</th><th>Süre (saat)</th></tr>' +
+    (d.open.length ? d.open.map((p) => `<tr><td>${p.id}</td><td>${p.sym}</td><td><span class="tag ${p.side[0]}">${p.side}</span></td><td class="mono">${p.lev}x</td><td class="mono">${p.entry}</td><td class="mono">${p.last}</td><td class="mono">${p.sl}</td><td class="mono">${p.tp}</td><td class="mono">${p.liq}</td><td class="mono">${f(p.notional_usdt)}</td><td class="mono">${f(p.margin_usdt, 4)}</td><td class="mono ${cls(p.upnl_usdt)}">${sg(p.upnl_usdt, 4)}</td><td class="mono">${f(p.mfe_pct)}</td><td class="mono">${f(p.age_h, 1)}</td></tr>`).join('') : '<tr><td colspan="14" class="sub">Açık pozisyon yok</td></tr>');
+
+  $('tTr').innerHTML = '<tr><th>Kapanış (TSİ)</th><th>ID</th><th>Coin</th><th>Yön</th><th>Kaldıraç</th><th>Giriş (USDT)</th><th>Çıkış (USDT)</th><th>Neden</th><th>Süre (dk)</th><th>Fee (USDT)</th><th>Funding (USDT)</th><th>Net (USDT)</th><th>Margin ROI (%)</th><th>MFE (%)</th><th>Sürüm</th></tr>' +
+    [...tr].reverse().map((t) => `<tr title="${(t.reason || '').replace(/"/g, '&quot;')}"><td>${tsi(t.closedAt)}</td><td>${t.id}</td><td>${t.symbol}</td><td><span class="tag ${t.side[0]}">${t.side}</span></td><td class="mono">${t.lev}x</td><td class="mono">${+t.entry.toPrecision(6)}</td><td class="mono">${+t.exit.toPrecision(6)}</td><td>${t.exitReason}</td><td class="mono">${t.holdMin}</td><td class="mono">${f(-(t.feeIn + t.feeOut), 4)}</td><td class="mono">${sg(t.funding, 4)}</td><td class="mono ${cls(t.net)}">${sg(t.net, 4)}</td><td class="mono ${cls(t.roiMarginPct)}">${sg(t.roiMarginPct, 1)}</td><td class="mono">${f(t.mfe)}</td><td>${t.version}</td></tr>`).join('');
+
+  $('dec').innerHTML = [...d.decisions].reverse().map((x) => `<div class="dec"><div class="t">${tsi(x.ts)} TSİ · ${x.version}</div><div>${x.summary.replace(/</g, '&lt;')}</div>${x.actions?.length ? `<div class="a mono">${x.actions.join(' · ')}</div>` : ''}</div>`).join('') || '<div class="sub">Henüz karar yok</div>';
+
+  $('tVer').innerHTML = '<tr><th>Sürüm</th><th>Tarih (TSİ)</th><th>İşlem (adet)</th><th>Net (USDT)</th><th>PF</th><th>WSR (%)</th><th>BSR (%)</th><th>Gerekçe</th></tr>' +
+    [...d.strategies].reverse().map((v) => { const s = stats(tr.filter((t) => t.version === v.version)); return `<tr title="${v.rules.replace(/"/g, '&quot;')}"><td><b>${v.version}</b></td><td>${tsi(v.at)}</td><td class="mono">${s.n}</td><td class="mono ${cls(s.net)}">${sg(s.net, 4)}</td><td class="mono">${s.pf === Infinity ? '∞' : f(s.pf, 3)}</td><td class="mono">${f(s.wsr, 1)}</td><td class="mono">${f(s.bsr, 1)}</td><td style="white-space:normal;max-width:520px">${(v.reason || '').replace(/</g, '&lt;')}</td></tr>`; }).join('');
+}
+
+async function load() {
+  try {
+    if (!window.DATA_URL || window.DATA_URL.includes('APP_NAME')) throw new Error('config.js içindeki DATA_URL henüz ayarlanmadı.');
+    const r = await fetch(window.DATA_URL, { cache: 'no-store' });
+    if (!r.ok) throw new Error(`Veri alınamadı: HTTP ${r.status}`);
+    render(await r.json()); $('err').style.display = 'none';
+  } catch (e) { $('err').textContent = e.message; $('err').style.display = 'block'; }
+}
+load(); setInterval(load, 5 * 60 * 1000);
+</script>
+</body>
+</html>
