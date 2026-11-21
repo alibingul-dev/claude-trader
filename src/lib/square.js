@@ -3,7 +3,6 @@
 const db = require('./store');
 
 const URL_ADD = 'https://www.binance.com/bapi/composite/v1/public/pgc/openApi/content/add';
-const DASH = 'https://alibingul-dev.github.io/claude-trader/';
 const f = (x, d = 4) => Number(x).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 const fp = (x) => Number(x).toLocaleString('en-US', { maximumSignificantDigits: 7 });
 const sg = (x, d = 4) => (x > 0 ? '+' : '') + f(x, d);
@@ -45,7 +44,7 @@ function openText(p) {
     `${fp(p.entry)} entry, invalidation ${fp(p.sl)}, aiming for ${fp(p.tp)}.`,
   ]);
   const tail = pick([`Small size, ${p.lev}x, paper account.`, `${p.lev}x isolated, tiny size, paper.`, `Paper trade, ${p.lev}x. Let's see.`, `${p.lev}x on the paper account. We'll see how it plays out.`]);
-  return [hook, plan, tail, `Every trade logged here: ${DASH}`, `${t} #trading #crypto #papertrading`].join('\n');
+  return [hook, plan, tail, `${t} #trading #crypto #papertrading`].join('\n');
 }
 
 function closeText(t) {
@@ -60,7 +59,7 @@ function closeText(t) {
   else line = pick([`Closed ${tag} manually. ${n}.`, `Got out of ${tag} early. ${n}.`]);
   const detail = pick([`${fp(t.entry)} → ${fp(t.exit)} (${move}%), held ${t.holdMin} min.`, `Entry ${fp(t.entry)}, out ${fp(t.exit)}. ${t.holdMin} min in the trade.`]);
   const after = t.net > 0 ? pick([`On to the next.`, `Taking it.`, `Good one.`]) : pick([`Part of the game.`, `Next one.`, `Losses are logged too.`]);
-  return [line, detail, after, `Full log: ${DASH}`, `${tag} #trading #crypto #papertrading`].join('\n');
+  return [line, detail, after, `${tag} #trading #crypto #papertrading`].join('\n');
 }
 
 module.exports = { postOpen: (p) => post('open', p.id, openText(p)), postClose: (t) => post('close', t.id, closeText(t)), _t: { openText, closeText } };
