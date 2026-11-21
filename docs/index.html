@@ -71,7 +71,7 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:#18202f}
 .topbar{display:none}.scrim{position:fixed;inset:0;background:#000a;z-index:45}.scrim[hidden]{display:none}
 .burger{width:38px;height:38px;flex:none;border:1px solid var(--line);border-radius:8px;background:var(--panel2);display:grid;place-content:center;gap:4px;cursor:pointer;padding:0}.burger span{display:block;width:16px;height:2px;border-radius:1px;background:var(--tx)}
 [data-view][hidden]{display:none!important}
-#karar .feed{height:260px}
+#karar .feed{height:min(560px,70vh);overflow-y:auto;-webkit-mask-image:none;scrollbar-width:thin;scrollbar-color:#2a3346 transparent;padding-right:6px}
 @media(max-width:900px){
   .rail{width:min(86vw,280px);transform:translateX(-102%);transition:transform .22s ease-out;z-index:50;box-shadow:0 0 40px #000c}.rail.open{transform:none}
   .page{margin-left:0}.topbar{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line);position:sticky;top:38px;z-index:4;background:var(--bg)}.topbar strong{font-size:15px}
@@ -346,7 +346,6 @@ function render(d) {
   const decHtml = [...d.decisions].reverse().map((x) => `<div class="dec"><div class="t">${tsi(x.ts)} TSİ · strateji ${x.version}</div>${decBody(x)}${x.actions?.length ? `<div class="a mono raw">${x.actions.map((a) => esc(actT(a))).join(' · ')}</div>` : ''}</div>`).join('') || '<div class="sub">Henüz karar yok</div>';
   const feed = $('feed'), inner = $('dec');
   feed.classList.remove('run'); inner.innerHTML = decHtml;
-  if (inner.scrollHeight > feed.clientHeight + 10) { inner.innerHTML = decHtml + decHtml; feed.style.setProperty('--dur', `${Math.max(30, d.decisions.length * 6)}s`); feed.classList.add('run'); }
 
   const it = [];
   for (const p of d.open) it.push(`<span class="ti"><b>Açık pozisyon · ${p.sym.replace('USDT', '')} ${p.side} ${p.lev}x</b><span class="${cls(p.upnl_usdt)}">${sg(p.upnl_usdt, 4)} USDT</span></span>`);
