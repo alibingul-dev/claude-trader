@@ -91,6 +91,10 @@ td{padding:8px 10px;border-bottom:1px solid #1a2130;white-space:nowrap}tr:hover 
 
   <section class="card" style="margin-bottom:16px"><h2>Açık pozisyonlar</h2><div class="scroll"><table id="tOpen"></table></div></section>
 
+  <section class="card" style="margin-bottom:16px"><h2>Yön bazında performans</h2><div class="scroll"><table id="tSide"></table></div></section>
+
+  <section class="card" style="margin-bottom:16px"><h2>Coin bazında açılış ve PnL</h2><div class="scroll"><table id="tSym"></table></div></section>
+
   <section class="card" style="margin-bottom:16px"><h2>İşlem geçmişi</h2><div class="scroll"><table id="tTr"></table></div></section>
 
   <section class="card"><h2>Strateji sürümleri</h2><div class="scroll"><table id="tVer"></table></div></section>
@@ -178,6 +182,23 @@ function render(d) {
   const pnlAt = (p, px) => { const dir = p.side === 'LONG' ? 1 : -1, q = p.notional_usdt / p.entry, ex = px * (1 - dir * slip); return q * (ex - p.entry) * dir - p.notional_usdt * fee - q * ex * fee; };
   $('tOpen').innerHTML = '<tr><th>Pozisyon no</th><th>Coin</th><th>Yön</th><th>Kaldıraç</th><th>Giriş (USDT)</th><th>Son (USDT)</th><th>Stop (USDT)</th><th>TP (USDT)</th><th>Likidasyon (USDT)</th><th>TP’de net (USDT)</th><th>Stop’ta net (USDT)</th><th>RRR</th><th>Notional (USDT)</th><th>Margin (USDT)</th><th>Açık PnL (USDT)</th><th>MFE (%)</th><th>Süre (saat)</th></tr>' +
     (d.open.length ? d.open.map((p) => `<tr><td>${p.id}</td><td>${p.sym}</td><td><span class="tag ${p.side[0]}">${p.side}</span></td><td class="mono">${p.lev}x</td><td class="mono">${fp(p.entry)}</td><td class="mono">${fp(p.last)}</td><td class="mono">${fp(p.sl)}</td><td class="mono">${fp(p.tp)}</td><td class="mono">${fp(p.liq)}</td><td class="mono pos">${sg(pnlAt(p, p.tp), 4)}</td><td class="mono neg">${sg(pnlAt(p, p.sl), 4)}</td><td class="mono">${f(pnlAt(p, p.tp) / -pnlAt(p, p.sl), 2)}</td><td class="mono">${f(p.notional_usdt)}</td><td class="mono">${f(p.margin_usdt, 4)}</td><td class="mono ${cls(p.upnl_usdt)}">${sg(p.upnl_usdt, 4)}</td><td class="mono">${f(p.mfe_pct)}</td><td class="mono">${f(p.age_h, 1)}</td></tr>`).join('') : '<tr><td colspan="17" class="sub">Açık pozisyon yok</td></tr>');
+
+  const symMap = new Map();
+  const addSym = (sym, side, net, closed) => {
+    const r = symMap.get(sym) || { sym, L: 0, S: 0, open: 0, closed: 0, win: 0, netL: 0, netS: 0 };
+    if (side === 'LONG') r.L++; else r.S++;
+    if (closed) { r.closed++; if (net > 0) r.win++; if (side === 'LONG') r.netL += net; else r.netS += net; } else r.open++;
+    symMap.set(sym, r);
+  };
+  for (const t of tr) addSym(t.symbol, t.side, t.net, true);
+  for (const p of d.open) addSym(p.sym, p.side, 0, false);
+  const symRows = [...symMap.values()].sort((a, b) => (b.L + b.S) - (a.L + a.S) || (b.netL + b.netS) - (a.netL + a.netS));
+  $('tSym').innerHTML = '<tr><th>Coin</th><th>Açılış (adet)</th><th>LONG (adet)</th><th>SHORT (adet)</th><th>Hâlâ açık (adet)</th><th>İsabet (%)</th><th>LONG net (USDT)</th><th>SHORT net (USDT)</th><th>Toplam net (USDT)</th></tr>' +
+    (symRows.length ? symRows.map((r) => `<tr><td>${r.sym.replace('USDT', '')}</td><td class="mono">${r.L + r.S}</td><td class="mono">${r.L}</td><td class="mono">${r.S}</td><td class="mono">${r.open}</td><td class="mono">${r.closed ? f(r.win / r.closed * 100, 1) : '—'}</td><td class="mono ${cls(r.netL)}">${sg(r.netL, 4)}</td><td class="mono ${cls(r.netS)}">${sg(r.netS, 4)}</td><td class="mono ${cls(r.netL + r.netS)}">${sg(r.netL + r.netS, 4)}</td></tr>`).join('') : '<tr><td colspan="9" class="sub">Henüz işlem yok</td></tr>');
+  const allOpenings = tr.length + d.open.length;
+  $('tSide').innerHTML = '<tr><th>Yön</th><th>Açılış (adet)</th><th>Pay (%)</th><th>Kapanmış (adet)</th><th>İsabet BSR (%)</th><th>WSR (%)</th><th>PF</th><th>Ort. net (USDT)</th><th>Toplam net (USDT)</th></tr>' +
+    ['LONG', 'SHORT'].map((sd) => { const ts = tr.filter((t) => t.side === sd), o = d.open.filter((p) => p.side === sd).length, x = stats(ts), n = ts.length + o;
+      return `<tr><td><span class="tag ${sd[0]}">${sd}</span></td><td class="mono">${n}</td><td class="mono">${allOpenings ? f(n / allOpenings * 100, 1) : '—'}</td><td class="mono">${x.n}</td><td class="mono">${f(x.bsr, 1)}</td><td class="mono">${f(x.wsr, 1)}</td><td class="mono">${x.pf === Infinity ? '∞' : f(x.pf, 3)}</td><td class="mono ${cls(x.n ? x.net / x.n : 0)}">${x.n ? sg(x.net / x.n, 4) : '—'}</td><td class="mono ${cls(x.net)}">${sg(x.net, 4)}</td></tr>`; }).join('');
 
   $('tTr').innerHTML = '<tr><th>Kapanış (TSİ)</th><th>Pozisyon no</th><th>Coin</th><th>Yön</th><th>Kaldıraç</th><th>Giriş (USDT)</th><th>Çıkış (USDT)</th><th>Neden</th><th>Süre (dk)</th><th>Fee (USDT)</th><th>Funding (USDT)</th><th>Net (USDT)</th><th>Margin ROI (%)</th><th>MFE (%)</th><th>Sürüm</th></tr>' +
     [...tr].reverse().map((t) => `<tr title="${(t.reason || '').replace(/"/g, '&quot;')}"><td>${tsi(t.closedAt)}</td><td>${t.id}</td><td>${t.symbol}</td><td><span class="tag ${t.side[0]}">${t.side}</span></td><td class="mono">${t.lev}x</td><td class="mono">${fp(t.entry)}</td><td class="mono">${fp(t.exit)}</td><td>${t.exitReason}</td><td class="mono">${t.holdMin}</td><td class="mono">${f(-(t.feeIn + t.feeOut), 4)}</td><td class="mono">${sg(t.funding, 4)}</td><td class="mono ${cls(t.net)}">${sg(t.net, 4)}</td><td class="mono ${cls(t.roiMarginPct)}">${sg(t.roiMarginPct, 1)}</td><td class="mono">${f(t.mfe)}</td><td>${t.version}</td></tr>`).join('');
