@@ -42,7 +42,8 @@ td{padding:8px 10px;border-bottom:1px solid #1a2130;white-space:nowrap}tr:hover 
 .scroll{max-height:420px;overflow:auto;scrollbar-width:thin;scrollbar-color:#2a3346 transparent}
 .scroll::-webkit-scrollbar{height:8px;width:8px}.scroll::-webkit-scrollbar-track{background:transparent}.scroll::-webkit-scrollbar-thumb{background:#2a3346;border-radius:4px}.tag{padding:1px 8px;border-radius:6px;font-size:11px;font-weight:500}
 .L{background:#12382a;color:var(--g)}.S{background:#3a1820;color:var(--r)}
-.dec{padding:10px 0;border-bottom:1px solid #1a2130}.dec .t{color:var(--mut);font-size:12px}.dec .a{font-size:12px;color:var(--b)}
+.dec{padding:12px 0;border-bottom:1px solid #1a2130}.dec .t{color:var(--mut);font-size:12px;margin-bottom:4px}.dec .a{font-size:12px;color:var(--b);margin-top:6px}
+.dec .k{display:block;color:var(--mut);font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;margin-top:6px}.dec .k.e{color:var(--a)}
 #err{display:none;background:#3a1820;border:1px solid var(--r);color:#ffd0d5;padding:14px 18px;border-radius:12px;margin-bottom:16px}
 .bar{height:6px;border-radius:3px;background:var(--panel2);overflow:hidden;margin-top:8px}.bar>i{display:block;height:100%;background:var(--g)}
 @media(max-width:1100px){.hero,.grid2,.grid3,.wrap{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}aside{position:static;height:600px}}
@@ -173,20 +174,29 @@ function render(d) {
   const lastT = tr.slice(-60);
   draw('cTr', { type: 'bar', data: { labels: lastT.map((t) => t.id), datasets: [{ data: lastT.map((t) => t.net), backgroundColor: colorBy(lastT.map((t) => t.net)), borderRadius: 2 }] }, options: barOpts('USDT') });
 
-  $('tOpen').innerHTML = '<tr><th>ID</th><th>Coin</th><th>Yön</th><th>Kaldıraç</th><th>Giriş (USDT)</th><th>Son (USDT)</th><th>Stop (USDT)</th><th>TP (USDT)</th><th>Likidasyon (USDT)</th><th>Notional (USDT)</th><th>Margin (USDT)</th><th>Açık PnL (USDT)</th><th>MFE (%)</th><th>Süre (saat)</th></tr>' +
-    (d.open.length ? d.open.map((p) => `<tr><td>${p.id}</td><td>${p.sym}</td><td><span class="tag ${p.side[0]}">${p.side}</span></td><td class="mono">${p.lev}x</td><td class="mono">${fp(p.entry)}</td><td class="mono">${fp(p.last)}</td><td class="mono">${fp(p.sl)}</td><td class="mono">${fp(p.tp)}</td><td class="mono">${fp(p.liq)}</td><td class="mono">${f(p.notional_usdt)}</td><td class="mono">${f(p.margin_usdt, 4)}</td><td class="mono ${cls(p.upnl_usdt)}">${sg(p.upnl_usdt, 4)}</td><td class="mono">${f(p.mfe_pct)}</td><td class="mono">${f(p.age_h, 1)}</td></tr>`).join('') : '<tr><td colspan="14" class="sub">Açık pozisyon yok</td></tr>');
+  const fee = d.config?.fee ?? 0.0005, slip = d.config?.slip ?? 0.0005;
+  const pnlAt = (p, px) => { const dir = p.side === 'LONG' ? 1 : -1, q = p.notional_usdt / p.entry, ex = px * (1 - dir * slip); return q * (ex - p.entry) * dir - p.notional_usdt * fee - q * ex * fee; };
+  $('tOpen').innerHTML = '<tr><th>Pozisyon no</th><th>Coin</th><th>Yön</th><th>Kaldıraç</th><th>Giriş (USDT)</th><th>Son (USDT)</th><th>Stop (USDT)</th><th>TP (USDT)</th><th>Likidasyon (USDT)</th><th>TP’de net (USDT)</th><th>Stop’ta net (USDT)</th><th>RRR</th><th>Notional (USDT)</th><th>Margin (USDT)</th><th>Açık PnL (USDT)</th><th>MFE (%)</th><th>Süre (saat)</th></tr>' +
+    (d.open.length ? d.open.map((p) => `<tr><td>${p.id}</td><td>${p.sym}</td><td><span class="tag ${p.side[0]}">${p.side}</span></td><td class="mono">${p.lev}x</td><td class="mono">${fp(p.entry)}</td><td class="mono">${fp(p.last)}</td><td class="mono">${fp(p.sl)}</td><td class="mono">${fp(p.tp)}</td><td class="mono">${fp(p.liq)}</td><td class="mono pos">${sg(pnlAt(p, p.tp), 4)}</td><td class="mono neg">${sg(pnlAt(p, p.sl), 4)}</td><td class="mono">${f(pnlAt(p, p.tp) / -pnlAt(p, p.sl), 2)}</td><td class="mono">${f(p.notional_usdt)}</td><td class="mono">${f(p.margin_usdt, 4)}</td><td class="mono ${cls(p.upnl_usdt)}">${sg(p.upnl_usdt, 4)}</td><td class="mono">${f(p.mfe_pct)}</td><td class="mono">${f(p.age_h, 1)}</td></tr>`).join('') : '<tr><td colspan="17" class="sub">Açık pozisyon yok</td></tr>');
 
-  $('tTr').innerHTML = '<tr><th>Kapanış (TSİ)</th><th>ID</th><th>Coin</th><th>Yön</th><th>Kaldıraç</th><th>Giriş (USDT)</th><th>Çıkış (USDT)</th><th>Neden</th><th>Süre (dk)</th><th>Fee (USDT)</th><th>Funding (USDT)</th><th>Net (USDT)</th><th>Margin ROI (%)</th><th>MFE (%)</th><th>Sürüm</th></tr>' +
+  $('tTr').innerHTML = '<tr><th>Kapanış (TSİ)</th><th>Pozisyon no</th><th>Coin</th><th>Yön</th><th>Kaldıraç</th><th>Giriş (USDT)</th><th>Çıkış (USDT)</th><th>Neden</th><th>Süre (dk)</th><th>Fee (USDT)</th><th>Funding (USDT)</th><th>Net (USDT)</th><th>Margin ROI (%)</th><th>MFE (%)</th><th>Sürüm</th></tr>' +
     [...tr].reverse().map((t) => `<tr title="${(t.reason || '').replace(/"/g, '&quot;')}"><td>${tsi(t.closedAt)}</td><td>${t.id}</td><td>${t.symbol}</td><td><span class="tag ${t.side[0]}">${t.side}</span></td><td class="mono">${t.lev}x</td><td class="mono">${fp(t.entry)}</td><td class="mono">${fp(t.exit)}</td><td>${t.exitReason}</td><td class="mono">${t.holdMin}</td><td class="mono">${f(-(t.feeIn + t.feeOut), 4)}</td><td class="mono">${sg(t.funding, 4)}</td><td class="mono ${cls(t.net)}">${sg(t.net, 4)}</td><td class="mono ${cls(t.roiMarginPct)}">${sg(t.roiMarginPct, 1)}</td><td class="mono">${f(t.mfe)}</td><td>${t.version}</td></tr>`).join('');
 
-  const decHtml = [...d.decisions].reverse().map((x) => `<div class="dec"><div class="t">${tsi(x.ts)} TSİ · ${x.version}</div><div>${x.summary.replace(/</g, '&lt;')}</div>${x.actions?.length ? `<div class="a mono">${x.actions.join(' · ')}</div>` : ''}</div>`).join('') || '<div class="sub">Henüz karar yok</div>';
+  const esc = (t) => String(t).replace(/</g, '&lt;');
+  const part = (t, k) => { const m = t.match(new RegExp(k + ':\\s*([\\s\\S]*?)(?=\\s*\\|?\\s*(?:Gördüm|Karar|Beklenti):|$)')); return m ? m[1].replace(/\s*\|\s*$/, '').trim() : null; };
+  const decBody = (x) => {
+    const g = part(x.summary, 'Gördüm'), k = part(x.summary, 'Karar'), b = part(x.summary, 'Beklenti');
+    if (!g && !k && !b) return `<div>${esc(x.summary)}</div>`;
+    return (g ? `<span class="k">Gördüm</span><div>${esc(g)}</div>` : '') + (k ? `<span class="k">Karar</span><div>${esc(k)}</div>` : '') + (b ? `<span class="k e">Beklenti</span><div>${esc(b)}</div>` : '');
+  };
+  const decHtml = [...d.decisions].reverse().map((x) => `<div class="dec"><div class="t">${tsi(x.ts)} TSİ · strateji ${x.version}</div>${decBody(x)}${x.actions?.length ? `<div class="a mono">${x.actions.map(esc).join(' · ')}</div>` : ''}</div>`).join('') || '<div class="sub">Henüz karar yok</div>';
   const feed = $('feed'), inner = $('dec');
   feed.classList.remove('run'); inner.innerHTML = decHtml;
   if (inner.scrollHeight > feed.clientHeight + 10) { inner.innerHTML = decHtml + decHtml; feed.style.setProperty('--dur', `${Math.max(30, d.decisions.length * 6)}s`); feed.classList.add('run'); }
 
   const it = [];
   for (const m of d.market?.market || []) it.push(`<span class="ti"><b>${m.s.replace('USDT', '')}</b>${fp(m.px)} USDT <span class="${cls(m.ch24)}">${sg(m.ch24, 2)} % (24s)</span> <span class="${cls(m.ch1h)}">${sg(m.ch1h, 2)} % (1s)</span></span>`);
-  for (const p of d.open) it.push(`<span class="ti"><b>${p.id} ${p.sym.replace('USDT', '')} ${p.side} ${p.lev}x</b><span class="${cls(p.upnl_usdt)}">${sg(p.upnl_usdt, 4)} USDT</span></span>`);
+  for (const p of d.open) it.push(`<span class="ti"><b>Açık pozisyon · ${p.sym.replace('USDT', '')} ${p.side} ${p.lev}x</b><span class="${cls(p.upnl_usdt)}">${sg(p.upnl_usdt, 4)} USDT</span></span>`);
   it.push(`<span class="ti"><b>Equity</b>${f(eqLast, 4)} USDT <span class="${cls(net)}">${sg(ret, 2)} %</span></span>`);
   if (d.market?.ts) it.push(`<span class="ti" style="color:var(--mut)">piyasa özeti ${tsi(d.market.ts)} TSİ</span>`);
   const tick = $('tick');
