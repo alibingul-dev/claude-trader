@@ -36,14 +36,14 @@ const pct = (a, b) => Math.abs((b / a - 1) * 100).toFixed(1);
 function openText(p) {
   const t = `$${coin(p.symbol)}`, up = p.side === 'LONG';
   const hook = up
-    ? pick([`${t} still has legs, going long here.`, `Longing ${t}. Momentum hasn't cooled off yet.`, `${t} keeps pushing, I'm in long.`, `Taking a long on ${t}, volume is there.`, `${t} looks like it wants more. Long.`])
-    : pick([`${t} is bleeding, shorting it.`, `Short ${t}. No bounce in sight yet.`, `${t} keeps dumping, I'm short.`, `Opened a short on ${t}, sellers in control.`, `${t} looks weak. Short.`]);
+    ? pick([`${t} still has legs, going long here 🚀`, `Longing ${t}. Momentum hasn't cooled off yet 🔥`, `${t} keeps pushing, I'm in long 📈`, `Taking a long on ${t}, volume is there 👀`, `${t} looks like it wants more. Long 💪`])
+    : pick([`${t} is bleeding, shorting it 🩸`, `Short ${t}. No bounce in sight yet 📉`, `${t} keeps dumping, I'm short 🔻`, `Opened a short on ${t}, sellers in control 🐻`, `${t} looks weak. Short 👇`]);
   const plan = pick([
     `Entry ${fp(p.entry)}, stop ${fp(p.sl)}, target ${fp(p.tp)}.`,
     `In at ${fp(p.entry)}. Stop ${fp(p.sl)} (${f(p.sl_pct, 1)}%), TP ${fp(p.tp)} (${f(p.tp_pct, 1)}%).`,
     `${fp(p.entry)} entry, invalidation ${fp(p.sl)}, aiming for ${fp(p.tp)}.`,
   ]);
-  const tail = pick([`Small size, ${p.lev}x, paper account.`, `${p.lev}x isolated, tiny size, paper.`, `Paper trade, ${p.lev}x. Let's see.`, `${p.lev}x on the paper account. We'll see how it plays out.`]);
+  const tail = pick([`Small size, ${p.lev}x, paper account.`, `${p.lev}x isolated, tiny size, paper.`, `Paper trade, ${p.lev}x. Let's see 🤞`, `${p.lev}x on the paper account. We'll see how it plays out 🍿`]);
   return [hook, plan, tail, `${t} #trading #crypto #papertrading`].join('\n');
 }
 
@@ -51,14 +51,14 @@ function closeText(t) {
   const tag = `$${coin(t.symbol)}`, n = `${sg(t.net)} USDT`, move = pct(t.entry, t.exit);
   const quick = t.holdMin <= 15;
   let line;
-  if (t.exitReason === 'TP') line = pick([`${tag} hit the target. That's the one. ${n}.`, `There it is, ${tag} tagged TP. ${n}.`, `Called it on ${tag}. TP filled, ${n}.`, `${tag} played out exactly like I wanted. ${n}.`]);
+  if (t.exitReason === 'TP') line = pick([`${tag} hit the target 🎯 That's the one. ${n}`, `There it is ✅ ${tag} tagged TP. ${n}`, `Called it on ${tag} 😎 TP filled, ${n}`, `${tag} played out exactly like I wanted 🙌 ${n}`]);
   else if (t.exitReason === 'STOP' || t.exitReason === 'LİKİDASYON') line = quick
-    ? pick([`Ugh, ${tag} wicked me out in ${t.holdMin} min. ${n}.`, `${tag} stopped out almost instantly. Stop was too tight. ${n}.`, `Well that was fast. ${tag} took my stop in ${t.holdMin} min. ${n}.`])
-    : pick([`${tag} didn't work out. Thought it would go, it didn't. ${n}.`, `Stopped out on ${tag}. Wrong call. ${n}.`, `${tag} turned on me, stop hit. ${n}.`, `Not this time. ${tag} stop got taken. ${n}.`]);
-  else if (t.exitReason === 'SÜRE') line = pick([`${tag} went nowhere, closed it on time. ${n}.`, `Ran out of patience on ${tag}, time exit. ${n}.`]);
+    ? pick([`Ugh 😩 ${tag} wicked me out in ${t.holdMin} min. ${n}`, `${tag} stopped out almost instantly 🤦 Stop was too tight. ${n}`, `Well that was fast 😅 ${tag} took my stop in ${t.holdMin} min. ${n}`])
+    : pick([`${tag} didn't work out 😕 Thought it would go, it didn't. ${n}`, `Stopped out on ${tag} ❌ Wrong call. ${n}`, `${tag} turned on me 🙃 stop hit. ${n}`, `Not this time 🤷 ${tag} stop got taken. ${n}`]);
+  else if (t.exitReason === 'SÜRE') line = pick([`${tag} went nowhere 😴 closed it on time. ${n}`, `Ran out of patience on ${tag} ⏳ time exit. ${n}`]);
   else line = pick([`Closed ${tag} manually. ${n}.`, `Got out of ${tag} early. ${n}.`]);
   const detail = pick([`${fp(t.entry)} → ${fp(t.exit)} (${move}%), held ${t.holdMin} min.`, `Entry ${fp(t.entry)}, out ${fp(t.exit)}. ${t.holdMin} min in the trade.`]);
-  const after = t.net > 0 ? pick([`On to the next.`, `Taking it.`, `Good one.`]) : pick([`Part of the game.`, `Next one.`, `Losses are logged too.`]);
+  const after = t.net > 0 ? pick([`On to the next 💪`, `Taking it.`, `Good one 🍀`]) : pick([`Part of the game.`, `Next one 👊`, `Losses are logged too.`]);
   return [line, detail, after, `${tag} #trading #crypto #papertrading`].join('\n');
 }
 
