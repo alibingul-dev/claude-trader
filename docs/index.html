@@ -99,7 +99,7 @@ td{padding:8px 10px;border-bottom:1px solid #1a2130;white-space:nowrap}tr:hover 
 </div>
 <nav class="rail" id="rail" aria-label="Bölümler">
   <div class="brand"><div class="name"><svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect width="26" height="26" rx="7" fill="#171d2a"/><line x1="8" x2="8" y1="6" y2="19" stroke="#ff5d6c" stroke-width="1.6"/><rect x="5.5" y="9" width="5" height="7" rx="1" fill="#ff5d6c"/><line x1="18" x2="18" y1="4" y2="20" stroke="#2fd18b" stroke-width="1.6"/><rect x="15.5" y="7" width="5" height="10" rx="1" fill="#2fd18b"/></svg>Claude Trader</div><div class="role">Binance USDT-M · intraday forward test</div></div>
-  <div class="nav"><a href="#ozet" data-go="ozet"><span class="bar"></span>Özet</a><a href="#grafik" data-go="grafik"><span class="bar"></span>Grafikler</a><a href="#acik" data-go="acik"><span class="bar"></span>Açık pozisyonlar</a><a href="#yon" data-go="yon"><span class="bar"></span>Yön bazında performans</a><a href="#coin" data-go="coin"><span class="bar"></span>Coin performansı</a><a href="#gecmis" data-go="gecmis"><span class="bar"></span>İşlem geçmişi</a><a href="#strateji" data-go="strateji"><span class="bar"></span>Strateji sürümleri</a></div>
+  <div class="nav"><a href="#ozet" data-go="ozet"><span class="bar"></span>Özet</a><a href="#grafik" data-go="grafik"><span class="bar"></span>Grafikler</a><a href="#acik" data-go="acik"><span class="bar"></span>Açık pozisyonlar</a><a href="#yon" data-go="yon"><span class="bar"></span>Yön bazında performans</a><a href="#coin" data-go="coin"><span class="bar"></span>Coin performansı</a><a href="#gecmis" data-go="gecmis"><span class="bar"></span>İşlem geçmişi</a><a href="#pas" data-go="pas"><span class="bar"></span>Pas geçilenler</a><a href="#strateji" data-go="strateji"><span class="bar"></span>Strateji sürümleri</a></div>
   <div class="rail-foot">
     <div class="links"><a href="https://alibingul-dev.github.io" target="_blank" rel="noopener">alibingul-dev.github.io</a><a href="https://www.linkedin.com/in/ali-bing%C3%BCl-b0666a30" target="_blank" rel="noopener">LinkedIn</a></div>
     <span class="lang"><button data-l="tr">TR</button><button data-l="en">EN</button></span>
@@ -158,6 +158,15 @@ td{padding:8px 10px;border-bottom:1px solid #1a2130;white-space:nowrap}tr:hover 
 
   <section class="card" id="sec-gecmis" data-view="gecmis"><h2>İşlem geçmişi</h2><div class="scroll"><table id="tTr"></table></div></section>
 
+  <section class="hero" data-view="pas" style="grid-template-columns:repeat(4,1fr)">
+    <div class="card"><div class="lbl">Durma kararı sonucu</div><div class="big" id="pVer">—</div><div class="sub" id="pVerSub"></div></div>
+    <div class="card"><div class="lbl">Açılsaydı net</div><div class="big" id="pNet">—</div><div class="sub" id="pNetSub"></div></div>
+    <div class="card"><div class="lbl">Doğru pas (zararla biterdi)</div><div class="big" id="pOk">—</div><div class="sub" id="pOkSub"></div></div>
+    <div class="card"><div class="lbl">Hâlâ izlenen</div><div class="big" id="pOpen">—</div><div class="sub">açılmadı, 1 dakikalık mumlarla izleniyor</div></div>
+  </section>
+  <section class="card" data-view="pas"><h2>İzlenen pas geçilen adaylar</h2><div class="scroll"><table id="tPasOpen"></table></div></section>
+  <section class="card" data-view="pas"><h2>Sonuçlanan pas geçilen adaylar</h2><div class="scroll"><table id="tPas"></table></div></section>
+
   <section class="card" id="sec-strateji" data-view="strateji"><h2>Strateji sürümleri</h2><div class="scroll"><table id="tVer"></table></div></section>
 </main>
 </div>
@@ -195,11 +204,11 @@ const PHR = [
   ['Açılış (adet)', 'Openings (count)'], ['İşlem (adet)', 'Trades (count)'], ['(adet)', '(count)'], ['Pay (%)', 'Share (%)'], ['Gerekçe', 'Rationale'], ['Sürüm', 'Version'],
   ['Başlangıç (USDT)', 'Start (USDT)'], ['aktif strateji', 'active strategy'], ['son veri', 'last data'], ['gerçekleşen', 'realised'], ['açık pozisyon', 'open positions'],
   ['başlangıç kasası', 'starting wallet'], ['nakit', 'cash'], ['açık ', 'unrealised '], [' gün', ' days'], ['piyasa özeti', 'market snapshot'], ['strateji v', 'strategy v'],
-  ['Equity ve drawdown', 'Equity & drawdown'], ['Coin performansı', 'Performance by coin'], ['Grafikler', 'Charts'], ['Özet', 'Overview'], ['Geç ›', 'Skip ›'],
+  ['Equity ve drawdown', 'Equity & drawdown'], ['Coin performansı', 'Performance by coin'], ['Grafikler', 'Charts'], ['Pas geçilenler', 'Skipped trades'], ['Durma kararı sonucu', 'Stand-aside verdict'], ['Açılsaydı net', 'Net if opened'], ['Açılsaydı PnL', 'PnL if opened'], ['Doğru pas (zararla biterdi)', 'Correct skips (would have lost)'], ['Hâlâ izlenen', 'Still tracked'], ['açılmadı, 1 dakikalık mumlarla izleniyor', 'not opened, tracked on 1m candles'], ['İzlenen pas geçilen adaylar', 'Tracked skipped candidates'], ['Sonuçlanan pas geçilen adaylar', 'Resolved skipped candidates'], ['Neden açılmadı', 'Why not opened'], ['Çıkış nedeni', 'Exit reason'], ['Pas kararı', 'Skip verdict'], ['İzlenen pas yok', 'No tracked skips'], ['Henüz sonuçlanan pas yok', 'No resolved skips yet'], ['henüz sonuçlanan pas yok', 'no resolved skips yet'], ['zarardan korudu', 'loss avoided'], ['kâr kaçırttı', 'profit missed'], ['durmak ', 'standing aside: '], [' pas ·', ' skips ·'], ['Özet', 'Overview'], ['Geç ›', 'Skip ›'],
   ['(24s)', '(24h)'], ['(1s)', '(1h)'], ['yükleniyor…', 'loading…'], ['TSİ', 'Istanbul'],
 ];
 const EXACT = { 'İşlem': 'Trades', 'adet': 'count', 'işlem': 'trades', 'dk': 'min', 'Yön': 'Side', 'Neden': 'Reason', 'Gördüm': 'Saw', 'Karar': 'Decision', 'Beklenti': 'Expectation',
-  'SÜRE': 'TIME', 'LİKİDASYON': 'LIQUIDATION', 'MANUEL': 'MANUAL' };
+  'SÜRE': 'TIME', 'LİKİDASYON': 'LIQUIDATION', 'MANUEL': 'MANUAL', 'Doğru': 'Correct', 'Yanlış': 'Wrong' };
 let lang = 'tr';
 try { lang = localStorage.getItem('ct-lang') || 'tr'; } catch (e) {}
 const qLang = (location.search.match(/[?&]lang=(tr|en)/) || [])[1]; if (qLang) lang = qLang;
@@ -323,6 +332,20 @@ function render(d) {
   const tick = $('tick');
   tick.innerHTML = it.join('<span class="ti sep">·</span>');
   tick.style.setProperty('--tdur', `${Math.round(tick.scrollWidth / 70)}s`);
+
+  const sk = d.skipped || [], so = d.skipped_open || [], P = stats(sk);
+  const okN = sk.filter((t) => t.net <= 0).length;
+  $('pVer').innerHTML = sk.length ? (P.net <= 0 ? '<span class="pos">Doğru</span>' : '<span class="neg">Yanlış</span>') : '—';
+  $('pVerSub').textContent = sk.length ? (P.net <= 0 ? `durmak ${f(-P.net, 4)} USDT zarardan korudu` : `durmak ${f(P.net, 4)} USDT kâr kaçırttı`) : 'henüz sonuçlanan pas yok';
+  $('pNet').innerHTML = `<span class="${cls(P.net)}">${sg(P.net, 4)}</span><span class="u">USDT</span>`;
+  $('pNetSub').textContent = `${f(sk.length, 0)} pas · PF ${P.pf == null ? '—' : P.pf === Infinity ? '∞' : f(P.pf, 3)} · BSR ${f(P.bsr, 1)} %`;
+  $('pOk').innerHTML = `${sk.length ? f(okN / sk.length * 100, 1) : '—'}<span class="u">%</span>`;
+  $('pOkSub').textContent = `${f(okN, 0)} / ${f(sk.length, 0)} adet`;
+  $('pOpen').innerHTML = `${f(so.length, 0)}<span class="u">adet</span>`;
+  $('tPasOpen').innerHTML = '<tr><th>Coin</th><th>Yön</th><th>Kaldıraç</th><th>Giriş (USDT)</th><th>Son (USDT)</th><th>Stop (USDT)</th><th>TP (USDT)</th><th>Açılsaydı PnL (USDT)</th><th>Süre (saat)</th><th>Neden açılmadı</th></tr>' +
+    (so.length ? so.map((p) => `<tr><td>${p.sym}</td><td><span class="tag ${p.side[0]}">${p.side}</span></td><td class="mono">${p.lev}x</td><td class="mono">${fp(p.entry)}</td><td class="mono">${fp(p.last)}</td><td class="mono">${fp(p.sl)}</td><td class="mono">${fp(p.tp)}</td><td class="mono ${cls(p.upnl_usdt)}">${sg(p.upnl_usdt, 4)}</td><td class="mono">${f(p.age_h, 1)}</td><td class="raw" style="white-space:normal;max-width:420px">${esc(p.reason || '')}</td></tr>`).join('') : '<tr><td colspan="10" class="sub">İzlenen pas yok</td></tr>');
+  $('tPas').innerHTML = '<tr><th>Kapanış (TSİ)</th><th>Coin</th><th>Yön</th><th>Kaldıraç</th><th>Çıkış nedeni</th><th>Süre (dk)</th><th>Açılsaydı net (USDT)</th><th>Pas kararı</th><th>Neden açılmadı</th><th>Sürüm</th></tr>' +
+    (sk.length ? [...sk].reverse().map((t) => `<tr><td>${tsi(t.closedAt)}</td><td>${t.symbol}</td><td><span class="tag ${t.side[0]}">${t.side}</span></td><td class="mono">${t.lev}x</td><td>${t.exitReason}</td><td class="mono">${t.holdMin}</td><td class="mono ${cls(t.net)}">${sg(t.net, 4)}</td><td class="${t.net <= 0 ? 'pos' : 'neg'}">${t.net <= 0 ? 'Doğru' : 'Yanlış'}</td><td class="raw" style="white-space:normal;max-width:420px">${esc(t.reason || '')}</td><td>${t.version}</td></tr>`).join('') : '<tr><td colspan="10" class="sub">Henüz sonuçlanan pas yok</td></tr>');
 
   $('tVer').innerHTML = '<tr><th>Sürüm</th><th>Tarih (TSİ)</th><th>İşlem (adet)</th><th>Net (USDT)</th><th>PF</th><th>WSR (%)</th><th>BSR (%)</th><th>Gerekçe</th></tr>' +
     [...d.strategies].reverse().map((v) => { const s = stats(tr.filter((t) => t.version === v.version)); return `<tr title="${v.rules.replace(/"/g, '&quot;')}"><td><b>${v.version}</b></td><td>${tsi(v.at)}</td><td class="mono">${s.n}</td><td class="mono ${cls(s.net)}">${sg(s.net, 4)}</td><td class="mono">${s.pf === Infinity ? '∞' : f(s.pf, 3)}</td><td class="mono">${f(s.wsr, 1)}</td><td class="mono">${f(s.bsr, 1)}</td><td style="white-space:normal;max-width:520px">${(v.reason || '').replace(/</g, '&lt;')}</td></tr>`; }).join('');
