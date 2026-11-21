@@ -1,12 +1,16 @@
-// Binance Square posting on real position open/close. Needs BINANCE_SQUARE_KEY (Creator Center → Create API Key).
-// Never throws: a failed post must not block trading. Every attempt is logged to partition "square".
+// On every real position open/close: (1) a Binance Square post (only if BINANCE_SQUARE_KEY is set),
+// (2) a bilingual Agent Resume feed entry stored in partition "feed", served by GET /api/feed and pulled
+// into alibingul-dev.github.io/team-feed by that repo's trader-feed workflow. Never throws.
 const db = require('./store');
 
 const URL_ADD = 'https://www.binance.com/bapi/composite/v1/public/pgc/openApi/content/add';
-const f = (x, d = 4) => Number(x).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
-const fp = (x) => Number(x).toLocaleString('en-US', { maximumSignificantDigits: 7 });
-const sg = (x, d = 4) => (x > 0 ? '+' : '') + f(x, d);
+const AGENT = 'crypto-trader';
+const nf = (loc) => (x, d) => Number(x).toLocaleString(loc, d == null ? { maximumSignificantDigits: 7 } : { minimumFractionDigits: d, maximumFractionDigits: d });
+const EN = nf('en-US'), TR = nf('tr-TR');
+const sgn = (fmt, x, d) => (x > 0 ? '+' : '') + fmt(x, d);
 const coin = (s) => String(s).replace(/USDT$/, '');
+const pick = (a) => a[Math.floor(Math.random() * a.length)];
+const pct = (a, b) => Math.abs((b / a - 1) * 100);
 
 async function send(text) {
   const r = await fetch(URL_ADD, {
@@ -17,7 +21,7 @@ async function send(text) {
   return r.json().catch(() => ({ code: `HTTP ${r.status}` }));
 }
 
-async function post(kind, id, text) {
+async function square(kind, id, text) {
   if (!process.env.BINANCE_SQUARE_KEY) return { skipped: 'BINANCE_SQUARE_KEY yok' };
   let res, body = text;
   try {
@@ -31,70 +35,107 @@ async function post(kind, id, text) {
   return out;
 }
 
-const pick = (a) => a[Math.floor(Math.random() * a.length)];
-
-// Coin track record from closed real trades: count, long/short split, win rate %, profit factor.
+// ---------- coin record ----------
 async function record(symbol) {
   let tr = [];
   try { tr = (await db.list('trade')).filter((x) => x.symbol === symbol); } catch {}
-  const tag = `$${coin(symbol)}`;
-  if (!tr.length) return { line: pick([`First time trading ${tag} here.`, `New coin for me, no history on ${tag} yet.`]), v: '' };
-  const L = tr.filter((x) => x.side === 'LONG').length, S = tr.length - L;
+  const n = tr.length, L = tr.filter((x) => x.side === 'LONG').length;
   const w = tr.filter((x) => x.net > 0), gw = w.reduce((a, x) => a + x.net, 0), gl = -tr.filter((x) => x.net <= 0).reduce((a, x) => a + x.net, 0);
-  const wr = Math.round((w.length / tr.length) * 100);
-  const pf = gl ? (gw / gl).toFixed(2) : null;
-  const side = [L && `${L} long`, S && `${S} short`].filter(Boolean).join(' / ');
-  const pfTxt = pf == null ? 'no losing trade yet' : `profit factor ${pf}`;
-  const v = verdict(tr.length, w.length, pf == null ? Infinity : +pf, tag);
-  return { v, line: pick([
-    `My ${tag} record so far: ${tr.length} trade${tr.length > 1 ? 's' : ''} (${side}), ${wr}% win rate, ${pfTxt}.`,
-    `${tag} track record: ${tr.length} trade${tr.length > 1 ? 's' : ''}, ${side}, won ${wr}% of them, ${pfTxt}.`,
-  ]) };
+  const pf = gl ? gw / gl : (n ? Infinity : null);
+  let cat = 'new';
+  if (n && n < 3) cat = 'early';
+  else if (n >= 3) cat = pf === Infinity ? 'perfect' : pf >= 2 ? 'star' : pf >= 1.2 ? 'solid' : pf >= 0.8 ? 'flip' : pf >= 0.4 && w.length ? 'headache' : 'shit';
+  return { tag: `$${coin(symbol)}`, n, L, S: n - L, wr: n ? Math.round((w.length / n) * 100) : 0, pf, cat };
 }
 
-// Performance label for the coin; needs at least 3 closed trades to judge.
-function verdict(n, wins, pf, tag) {
-  if (n < 3) return pick([`Too early to judge ${tag}.`, `Not enough trades to call ${tag} yet.`]);
-  if (pf === Infinity) return pick([`${tag} is my star so far ⭐`, `Can't lose on ${tag} lately 🌟`]);
-  if (pf >= 2) return pick([`${tag} = star coin for me ⭐`, `${tag} keeps paying, star material ⭐`]);
-  if (pf >= 1.2) return pick([`${tag} is a solid one 👍`, `${tag} treats me well 👍`]);
-  if (pf >= 0.8) return pick([`${tag} is a coin flip so far 🪙`, `${tag} = pure coin flip for me 🪙`]);
-  if (pf >= 0.4 && wins > 0) return pick([`${tag} gives me headaches 🤕`, `${tag} and me don't get along 🤕`]);
-  return pick([`${tag} = certified shitcoin for me 💩`, `${tag} is a shitcoin in my book 💩`]);
-}
-const pct = (a, b) => Math.abs((b / a - 1) * 100).toFixed(1);
+const recEN = (r) => {
+  if (!r.n) return { line: pick([`First time trading ${r.tag} here.`, `New coin for me, no history on ${r.tag} yet.`]), v: '' };
+  const side = [r.L && `${r.L} long`, r.S && `${r.S} short`].filter(Boolean).join(' / ');
+  const pf = r.pf === Infinity ? 'no losing trade yet' : `profit factor ${EN(r.pf, 2)}`;
+  const s = r.n > 1 ? 's' : '';
+  const v = {
+    early: [`Too early to judge ${r.tag}.`, `Not enough trades to call ${r.tag} yet.`],
+    perfect: [`${r.tag} is my star so far ⭐`, `Can't lose on ${r.tag} lately 🌟`],
+    star: [`${r.tag} = star coin for me ⭐`, `${r.tag} keeps paying, star material ⭐`],
+    solid: [`${r.tag} is a solid one 👍`, `${r.tag} treats me well 👍`],
+    flip: [`${r.tag} is a coin flip so far 🪙`, `${r.tag} = pure coin flip for me 🪙`],
+    headache: [`${r.tag} gives me headaches 🤕`, `${r.tag} and me don't get along 🤕`],
+    shit: [`${r.tag} = certified shitcoin for me 💩`, `${r.tag} is a shitcoin in my book 💩`],
+  }[r.cat];
+  return { v: pick(v), line: pick([`My ${r.tag} record so far: ${r.n} trade${s} (${side}), ${r.wr}% win rate, ${pf}.`, `${r.tag} track record: ${r.n} trade${s}, ${side}, won ${r.wr}% of them, ${pf}.`]) };
+};
+const recTR = (r) => {
+  if (!r.n) return { line: `${r.tag} ile ilk işlemim.`, v: '' };
+  const side = [r.L && `${r.L} long`, r.S && `${r.S} short`].filter(Boolean).join(' / ');
+  const pf = r.pf === Infinity ? 'henüz zararlı işlem yok' : `profit factor ${TR(r.pf, 2)}`;
+  const v = { early: `${r.tag} için karar vermek erken.`, perfect: `${r.tag} şimdilik yıldızım ⭐`, star: `${r.tag} benim yıldız coinim ⭐`,
+    solid: `${r.tag} sağlam çıkıyor 👍`, flip: `${r.tag} şimdilik yazı tura 🪙`, headache: `${r.tag} baş ağrıtıyor 🤕`, shit: `${r.tag} benim için tam bir shitcoin 💩` }[r.cat];
+  return { v, line: `${r.tag} geçmişim: ${r.n} işlem (${side}), kazanma oranı %${r.wr}, ${pf}.` };
+};
 
-function openText(p, rec) {
-  const t = `$${coin(p.symbol)}`, up = p.side === 'LONG';
+// ---------- texts ----------
+function openEN(p, r) {
+  const t = r.tag, up = p.side === 'LONG', rc = recEN(r);
   const hook = up
     ? pick([`${t} still has legs, going long here 🚀`, `Longing ${t}. Momentum hasn't cooled off yet 🔥`, `${t} keeps pushing, I'm in long 📈`, `Taking a long on ${t}, volume is there 👀`, `${t} looks like it wants more. Long 💪`])
     : pick([`${t} is bleeding, shorting it 🩸`, `Short ${t}. No bounce in sight yet 📉`, `${t} keeps dumping, I'm short 🔻`, `Opened a short on ${t}, sellers in control 🐻`, `${t} looks weak. Short 👇`]);
-  const plan = pick([
-    `Entry ${fp(p.entry)}, stop ${fp(p.sl)}, target ${fp(p.tp)}.`,
-    `In at ${fp(p.entry)}. Stop ${fp(p.sl)} (${f(p.sl_pct, 1)}%), TP ${fp(p.tp)} (${f(p.tp_pct, 1)}%).`,
-    `${fp(p.entry)} entry, invalidation ${fp(p.sl)}, aiming for ${fp(p.tp)}.`,
-  ]);
+  const plan = pick([`Entry ${EN(p.entry)}, stop ${EN(p.sl)}, target ${EN(p.tp)}.`, `In at ${EN(p.entry)}. Stop ${EN(p.sl)} (${EN(p.sl_pct, 1)}%), TP ${EN(p.tp)} (${EN(p.tp_pct, 1)}%).`, `${EN(p.entry)} entry, invalidation ${EN(p.sl)}, aiming for ${EN(p.tp)}.`]);
   const tail = pick([`Small size, ${p.lev}x, paper account.`, `${p.lev}x isolated, tiny size, paper.`, `Paper trade, ${p.lev}x. Let's see 🤞`, `${p.lev}x on the paper account. We'll see how it plays out 🍿`]);
-  return [hook, plan, tail, rec.line, rec.v, `${t} #trading #crypto #papertrading`].filter(Boolean).join('\n');
+  return [hook, plan, tail, rc.line, rc.v].filter(Boolean);
 }
-
-function closeText(t, rec) {
-  const tag = `$${coin(t.symbol)}`, n = `${sg(t.net)} USDT`, move = pct(t.entry, t.exit);
-  const quick = t.holdMin <= 15;
+function openTR(p, r) {
+  const t = r.tag, up = p.side === 'LONG', rc = recTR(r);
+  return [`${t} ${up ? 'LONG açtım, momentum sürüyor 📈' : 'SHORT açtım, satıcılar baskın 📉'}`,
+    `Giriş ${TR(p.entry)}, stop ${TR(p.sl)} (%${TR(p.sl_pct, 1)}), hedef ${TR(p.tp)} (%${TR(p.tp_pct, 1)}).`,
+    `${p.lev}x, küçük pozisyon, kağıt hesap.`, rc.line, rc.v].filter(Boolean);
+}
+function closeEN(t, r) {
+  const tag = r.tag, n = `${sgn(EN, t.net, 4)} USDT`, rc = recEN(r);
   let line;
   if (t.exitReason === 'TP') line = pick([`${tag} hit the target 🎯 That's the one. ${n}`, `There it is ✅ ${tag} tagged TP. ${n}`, `Called it on ${tag} 😎 TP filled, ${n}`, `${tag} played out exactly like I wanted 🙌 ${n}`]);
-  else if (t.exitReason === 'STOP' || t.exitReason === 'LİKİDASYON') line = quick
+  else if (t.exitReason === 'STOP' || t.exitReason === 'LİKİDASYON') line = t.holdMin <= 15
     ? pick([`Ugh 😩 ${tag} wicked me out in ${t.holdMin} min. ${n}`, `${tag} stopped out almost instantly 🤦 Stop was too tight. ${n}`, `Well that was fast 😅 ${tag} took my stop in ${t.holdMin} min. ${n}`])
     : pick([`${tag} didn't work out 😕 Thought it would go, it didn't. ${n}`, `Stopped out on ${tag} ❌ Wrong call. ${n}`, `${tag} turned on me 🙃 stop hit. ${n}`, `Not this time 🤷 ${tag} stop got taken. ${n}`]);
   else if (t.exitReason === 'SÜRE') line = pick([`${tag} went nowhere 😴 closed it on time. ${n}`, `Ran out of patience on ${tag} ⏳ time exit. ${n}`]);
   else line = pick([`Closed ${tag} manually. ${n}.`, `Got out of ${tag} early. ${n}.`]);
-  const detail = pick([`${fp(t.entry)} → ${fp(t.exit)} (${move}%), held ${t.holdMin} min.`, `Entry ${fp(t.entry)}, out ${fp(t.exit)}. ${t.holdMin} min in the trade.`]);
+  const detail = pick([`${EN(t.entry)} → ${EN(t.exit)} (${EN(pct(t.entry, t.exit), 1)}%), held ${t.holdMin} min.`, `Entry ${EN(t.entry)}, out ${EN(t.exit)}. ${t.holdMin} min in the trade.`]);
   const after = t.net > 0 ? pick([`On to the next 💪`, `Taking it.`, `Good one 🍀`]) : pick([`Part of the game.`, `Next one 👊`, `Losses are logged too.`]);
-  return [line, detail, after, rec.line, rec.v, `${tag} #trading #crypto #papertrading`].filter(Boolean).join('\n');
+  return [line, detail, after, rc.line, rc.v].filter(Boolean);
+}
+function closeTR(t, r) {
+  const tag = r.tag, n = `${sgn(TR, t.net, 4)} USDT`, rc = recTR(r);
+  const line = t.exitReason === 'TP' ? `${tag} hedefe ulaştı 🎯 İşte bu! ${n}`
+    : t.exitReason === 'STOP' || t.exitReason === 'LİKİDASYON' ? (t.holdMin <= 15 ? `Tüh 😩 ${tag} ${t.holdMin} dakikada stopa değdi. ${n}` : `${tag} tutmadı 😕 Buraya gider dedim, olmadı. ${n}`)
+    : t.exitReason === 'SÜRE' ? `${tag} yerinde saydı 😴 süre dolunca kapattım. ${n}` : `${tag} pozisyonunu elle kapattım. ${n}`;
+  return [line, `${TR(t.entry)} → ${TR(t.exit)} (%${TR(pct(t.entry, t.exit), 1)}), ${t.holdMin} dakika tuttum.`, t.net > 0 ? 'Sıradaki 💪' : 'Oyunun parçası.', rc.line, rc.v].filter(Boolean);
 }
 
-module.exports = {
-  postOpen: async (p) => post('open', p.id, openText(p, await record(p.symbol))),
-  postClose: async (t) => post('close', t.id, closeText(t, await record(t.symbol))),
-  _t: { openText, closeText, record },
-};
+// ---------- Agent Resume feed entry (team-feed/SCHEMA.md) ----------
+async function feed(kind, x, en, tr, ts) {
+  const day = new Date(ts).toISOString().slice(0, 10);
+  const id = `${day}-trade-${x.id.toLowerCase()}-${kind}`;
+  const post = {
+    id, topic: 'crypto', agent: AGENT, posted_at: new Date(ts).toISOString().replace(/\.\d+Z$/, 'Z'),
+    title: en[0].slice(0, 80), hook: en[1], body: [en.slice(2).join(' ')],
+    meaning: 'What it means: this is a paper trade with real fees, slippage and funding counted, so the coin\'s running record matters more than any single trade.',
+    tags: ['Crypto', coin(x.symbol), x.side === 'LONG' ? 'Long' : 'Short', 'Paper trading'],
+    sources: [{ title: `Binance USDT-M Futures: ${x.symbol}`, url: `https://www.binance.com/en/futures/${x.symbol}`, date: day }],
+    media: null, more: null, linkedin: null, reviewed: false, comments: [],
+    tr: { title: tr[0].slice(0, 80), hook: tr[1], body: [tr.slice(2).join(' ')], meaning: 'Ne anlama geliyor: komisyon, kayma ve funding dahil kağıt üzerinde bir işlem; tek işlemden çok coinin birikmiş karnesi önemli.' },
+  };
+  try { await db.put('feed', id, post); } catch {}
+  return id;
+}
+
+async function onOpen(p) {
+  const r = await record(p.symbol), en = openEN(p, r);
+  await feed('open', p, en, openTR(p, r), p.openedAt);
+  return square('open', p.id, [...en, `${r.tag} #trading #crypto #papertrading`].join('\n'));
+}
+async function onClose(t) {
+  const r = await record(t.symbol), en = closeEN(t, r);
+  await feed('close', t, en, closeTR(t, r), t.closedAt);
+  return square('close', t.id, [...en, `${r.tag} #trading #crypto #papertrading`].join('\n'));
+}
+
+module.exports = { postOpen: onOpen, postClose: onClose, feedList: async () => (await db.list('feed')).sort((a, b) => (a.posted_at < b.posted_at ? 1 : -1)).slice(0, 60), _t: { openEN, openTR, closeEN, closeTR, record, recEN } };
