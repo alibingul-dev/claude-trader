@@ -35,9 +35,22 @@ const notionalFor = (s, equity) =>
   Math.max(CFG.baseNotional, Math.floor((CFG.baseNotional * equity) / s.startWallet));
 
 // Highest leverage whose liquidation distance still contains the stop (isolated margin).
-function leverageFor(slPct) {
-  const lev = Math.floor(1 / (slPct / 100 + CFG.mmr + CFG.liqBuffer));
-  return Math.max(1, Math.min(CFG.maxLev, lev));
+function leverageFor(slPct, cap = CFG.maxLev, mmr = CFG.mmr) {
+  const lev = Math.floor(1 / (slPct / 100 + mmr + CFG.liqBuffer));
+  return Math.max(1, Math.min(cap, lev));
+}
+
+// Coin's own max leverage + maintenance margin for this notional (Binance leverageBracket); fallback DEFAULT_MAX_LEV.
+async function coinLimits(symbol, notional) {
+  try {
+    const lb = await bn.leverageBracket(symbol);
+    if (!lb) return { cap: CFG.maxLev, mmr: CFG.mmr, src: 'DEFAULT_MAX_LEV' };
+    const row = Array.isArray(lb) ? lb.find((x) => x.symbol === symbol) || lb[0] : lb;
+    const br = row.brackets.find((b) => notional >= b.notionalFloor && notional < b.notionalCap) || row.brackets[0];
+    return { cap: br.initialLeverage, mmr: br.maintMarginRatio, src: 'binance' };
+  } catch (e) {
+    return { cap: CFG.maxLev, mmr: CFG.mmr, src: `DEFAULT_MAX_LEV (bracket hatası: ${e.message.slice(0, 80)})` };
+  }
 }
 
 function compactPos(p) {
@@ -237,7 +250,8 @@ async function openPosition({ symbol, side, sl_pct, tp_pct, max_hold_h = 24, rea
   const notional = notionalFor(s, s.wallet + upnl);
   if (notional < minNot) throw new Error(`${symbol} minNotional ${minNot} USDT > notional ${notional} USDT`);
 
-  const lev = leverageFor(sl_pct);
+  const lim = await coinLimits(symbol, notional);
+  const lev = leverageFor(sl_pct, lim.cap, lim.mmr);
   const margin = notional / lev;
   const dir = side === 'LONG' ? 1 : -1;
   const mark = +pi.markPrice;
@@ -257,14 +271,15 @@ async function openPosition({ symbol, side, sl_pct, tp_pct, max_hold_h = 24, rea
     sl_pct, tp_pct,
     sl: entry * (1 - (dir * sl_pct) / 100),
     tp: entry * (1 + (dir * tp_pct) / 100),
-    liq: entry * (1 - dir * (1 / lev - CFG.mmr)),
+    liq: entry * (1 - dir * (1 / lev - lim.mmr)),
+    coinMaxLev: lim.cap, levSource: lim.src,
     openedAt: now, checkedTs: now, fundingCheckedTs: now, maxHoldMs: max_hold_h * 3.6e6,
     version: s.version, reason: String(reason).slice(0, 500), mfe: 0, mae: 0,
   };
   s.wallet -= feeIn;
   await db.put('pos', pos.id, pos);
   await db.put('state', 'main', s);
-  return { opened: compactPos(pos), wallet_usdt: rd(s.wallet) };
+  return { opened: { ...compactPos(pos), coin_max_lev: lim.cap, lev_source: lim.src }, wallet_usdt: rd(s.wallet) };
 }
 
 async function closePosition({ id, reason = '' }) {
