@@ -33,7 +33,7 @@ aside .card{flex:1;display:flex;flex-direction:column;overflow:hidden}
 @media(prefers-reduced-motion:reduce){.ticker .track,.feed .inner{animation:none}}
 .hero{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:16px;margin-bottom:16px}
 .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:16px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;min-width:0}
+.card[data-view]{margin-bottom:16px}.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;min-width:0}
 .dec div{white-space:normal}
 .big{font-size:34px;font-weight:600;letter-spacing:-.02em}.mid{font-size:22px;font-weight:600}
 .lbl{color:var(--mut);font-size:12px;margin-bottom:4px}.u{color:var(--mut);font-size:.55em;font-weight:500;margin-left:4px}
@@ -59,12 +59,16 @@ td{padding:8px 10px;border-bottom:1px solid #1a2130;white-space:nowrap}tr:hover 
 .page{margin-left:var(--rail);min-width:0}
 .topbar{display:none}.scrim{position:fixed;inset:0;background:#000a;z-index:45}.scrim[hidden]{display:none}
 .burger{width:38px;height:38px;flex:none;border:1px solid var(--line);border-radius:8px;background:var(--panel2);display:grid;place-content:center;gap:4px;cursor:pointer;padding:0}.burger span{display:block;width:16px;height:2px;border-radius:1px;background:var(--tx)}
-section[id],aside[id]{scroll-margin-top:56px}
+[data-view][hidden]{display:none!important}
+body[data-view="karar"] .wrap{grid-template-columns:minmax(0,1fr)}body[data-view="karar"] .left{display:none}
+body[data-view="karar"] aside{position:static;height:auto;padding:24px 0 48px}body[data-view="karar"] .feed{-webkit-mask-image:none;overflow:visible}body[data-view="karar"] .feed .inner{animation:none!important}
+body[data-view="karar"] .dec{max-width:900px}
+@media(max-width:1100px){body:not([data-view="karar"]) aside{display:none}}
 @media(max-width:900px){
   .rail{width:min(86vw,280px);transform:translateX(-102%);transition:transform .22s ease-out;z-index:50;box-shadow:0 0 40px #000c}.rail.open{transform:none}
   .page{margin-left:0}.topbar{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line);position:sticky;top:38px;z-index:4;background:var(--bg)}.topbar strong{font-size:15px}
   .wrap{padding:0 14px}header{flex-direction:column;align-items:flex-start}.hero{grid-template-columns:1fr 1fr}.big{font-size:26px}.mid{font-size:19px}.card{padding:14px}
-  .ti{font-size:12px;margin:0 14px}section[id],aside[id]{scroll-margin-top:100px}
+  .ti{font-size:12px;margin:0 14px}
 }
 #ct-intro{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 42%,#111a2b 0%,#07090d 70%);animation:ctOut .25s ease-in 2.15s forwards}
 #ct-intro .ct-chart{width:min(92vw,860px);height:auto;margin-top:-4vh}
@@ -98,7 +102,7 @@ section[id],aside[id]{scroll-margin-top:56px}
 </div>
 <nav class="rail" id="rail" aria-label="Bölümler">
   <div class="brand"><div class="name"><svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect width="26" height="26" rx="7" fill="#171d2a"/><line x1="8" x2="8" y1="6" y2="19" stroke="#ff5d6c" stroke-width="1.6"/><rect x="5.5" y="9" width="5" height="7" rx="1" fill="#ff5d6c"/><line x1="18" x2="18" y1="4" y2="20" stroke="#2fd18b" stroke-width="1.6"/><rect x="15.5" y="7" width="5" height="10" rx="1" fill="#2fd18b"/></svg>Claude Trader</div><div class="role">Binance USDT-M · intraday forward test</div></div>
-  <div class="nav"><a href="#sec-ozet" data-sec="sec-ozet"><span class="bar"></span>Özet</a><a href="#sec-equity" data-sec="sec-equity"><span class="bar"></span>Equity ve drawdown</a><a href="#sec-grafik" data-sec="sec-grafik"><span class="bar"></span>Grafikler</a><a href="#sec-acik" data-sec="sec-acik"><span class="bar"></span>Açık pozisyonlar</a><a href="#sec-yon" data-sec="sec-yon"><span class="bar"></span>Yön bazında performans</a><a href="#sec-coin" data-sec="sec-coin"><span class="bar"></span>Coin performansı</a><a href="#sec-gecmis" data-sec="sec-gecmis"><span class="bar"></span>İşlem geçmişi</a><a href="#karar" data-sec="karar"><span class="bar"></span>Karar günlüğü</a><a href="#sec-strateji" data-sec="sec-strateji"><span class="bar"></span>Strateji sürümleri</a></div>
+  <div class="nav"><a href="#ozet" data-go="ozet"><span class="bar"></span>Özet</a><a href="#grafik" data-go="grafik"><span class="bar"></span>Grafikler</a><a href="#acik" data-go="acik"><span class="bar"></span>Açık pozisyonlar</a><a href="#yon" data-go="yon"><span class="bar"></span>Yön bazında performans</a><a href="#coin" data-go="coin"><span class="bar"></span>Coin performansı</a><a href="#gecmis" data-go="gecmis"><span class="bar"></span>İşlem geçmişi</a><a href="#karar" data-go="karar"><span class="bar"></span>Karar günlüğü</a><a href="#strateji" data-go="strateji"><span class="bar"></span>Strateji sürümleri</a></div>
   <div class="rail-foot">
     <div class="links"><a href="https://alibingul-dev.github.io" target="_blank" rel="noopener">alibingul-dev.github.io</a><a href="https://www.linkedin.com/in/ali-bing%C3%BCl-b0666a30" target="_blank" rel="noopener">LinkedIn</a></div>
     <span class="lang"><button data-l="tr">TR</button><button data-l="en">EN</button></span>
@@ -121,41 +125,41 @@ section[id],aside[id]{scroll-margin-top:56px}
 <main>
   <div id="err"></div>
 
-  <section class="hero" id="sec-ozet">
+  <section class="hero" id="sec-ozet" data-view="ozet">
     <div class="card"><div class="lbl">Net kâr</div><div class="big" id="kNet">—</div><div class="sub" id="kNetSub"></div></div>
     <div class="card"><div class="lbl">Getiri</div><div class="big" id="kRet">—</div><div class="sub" id="kRetSub"></div></div>
     <div class="card"><div class="lbl">Equity</div><div class="big" id="kEq">—</div><div class="sub" id="kEqSub"></div></div>
     <div class="card"><div class="lbl">Profit factor</div><div class="big" id="kPf">—</div><div class="bar"><i id="kWsrBar" style="width:0"></i></div><div class="sub" id="kPfSub"></div></div>
   </section>
 
-  <section class="kpis" id="kpis"></section>
+  <section class="kpis" id="kpis" data-view="ozet"></section>
 
-  <section class="grid2" id="sec-equity">
+  <section class="grid2" id="sec-equity" data-view="ozet">
     <div class="card"><h2>Equity eğrisi (USDT)</h2><div class="chart"><canvas id="cEq"></canvas></div></div>
     <div class="card"><h2>Drawdown (%)</h2><div class="chart"><canvas id="cDd"></canvas></div></div>
   </section>
 
-  <section class="grid3" id="sec-grafik">
+  <section class="grid3" id="sec-grafik" data-view="grafik">
     <div class="card"><h2>Günlük net PnL (USDT)</h2><div class="chart s"><canvas id="cDay"></canvas></div></div>
     <div class="card"><h2>Coin bazında net PnL (USDT)</h2><div class="chart s"><canvas id="cSym"></canvas></div></div>
     <div class="card"><h2>Saat bazında net PnL (USDT, TSİ)</h2><div class="chart s"><canvas id="cHour"></canvas></div></div>
   </section>
 
-  <section class="grid3">
+  <section class="grid3" data-view="grafik">
     <div class="card"><h2>Long / Short net PnL (USDT)</h2><div class="chart s"><canvas id="cSide"></canvas></div></div>
     <div class="card"><h2>Çıkış nedeni (adet)</h2><div class="chart s"><canvas id="cExit"></canvas></div></div>
     <div class="card"><h2>İşlem başına net PnL (USDT)</h2><div class="chart s"><canvas id="cTr"></canvas></div></div>
   </section>
 
-  <section class="card" id="sec-acik" style="margin-bottom:16px"><h2>Açık pozisyonlar</h2><div class="scroll"><table id="tOpen"></table></div></section>
+  <section class="card" id="sec-acik" data-view="acik"><h2>Açık pozisyonlar</h2><div class="scroll"><table id="tOpen"></table></div></section>
 
-  <section class="card" id="sec-yon" style="margin-bottom:16px"><h2>Yön bazında performans</h2><div class="scroll"><table id="tSide"></table></div></section>
+  <section class="card" id="sec-yon" data-view="yon"><h2>Yön bazında performans</h2><div class="scroll"><table id="tSide"></table></div></section>
 
-  <section class="card" id="sec-coin" style="margin-bottom:16px"><h2>Coin bazında açılış ve PnL</h2><div class="scroll"><table id="tSym"></table></div></section>
+  <section class="card" id="sec-coin" data-view="coin"><h2>Coin bazında açılış ve PnL</h2><div class="scroll"><table id="tSym"></table></div></section>
 
-  <section class="card" id="sec-gecmis" style="margin-bottom:16px"><h2>İşlem geçmişi</h2><div class="scroll"><table id="tTr"></table></div></section>
+  <section class="card" id="sec-gecmis" data-view="gecmis"><h2>İşlem geçmişi</h2><div class="scroll"><table id="tTr"></table></div></section>
 
-  <section class="card" id="sec-strateji"><h2>Strateji sürümleri</h2><div class="scroll"><table id="tVer"></table></div></section>
+  <section class="card" id="sec-strateji" data-view="strateji"><h2>Strateji sürümleri</h2><div class="scroll"><table id="tVer"></table></div></section>
 </main>
 </div>
 <aside id="karar"><div class="card"><h2>Karar günlüğü</h2><div class="feed" id="feed"><div class="inner" id="dec"></div></div></div></aside>
@@ -311,7 +315,7 @@ function render(d) {
   const decHtml = [...d.decisions].reverse().map((x) => `<div class="dec"><div class="t">${tsi(x.ts)} TSİ · strateji ${x.version}</div>${decBody(x)}${x.actions?.length ? `<div class="a mono raw">${x.actions.map(esc).join(' · ')}</div>` : ''}</div>`).join('') || '<div class="sub">Henüz karar yok</div>';
   const feed = $('feed'), inner = $('dec');
   feed.classList.remove('run'); inner.innerHTML = decHtml;
-  if (inner.scrollHeight > feed.clientHeight + 10) { inner.innerHTML = decHtml + decHtml; feed.style.setProperty('--dur', `${Math.max(30, d.decisions.length * 6)}s`); feed.classList.add('run'); }
+  if (document.body.dataset.view !== 'karar' && inner.scrollHeight > feed.clientHeight + 10) { inner.innerHTML = decHtml + decHtml; feed.style.setProperty('--dur', `${Math.max(30, d.decisions.length * 6)}s`); feed.classList.add('run'); }
 
   const it = [];
   for (const m of d.market?.market || []) it.push(`<span class="ti"><b>${m.s.replace('USDT', '')}</b>${fp(m.px)} USDT <span class="${cls(m.ch24)}">${sg(m.ch24, 2)} % (24s)</span> <span class="${cls(m.ch1h)}">${sg(m.ch1h, 2)} % (1s)</span></span>`);
@@ -341,9 +345,17 @@ async function load() {
   burger.addEventListener('click', () => setOpen(!rail.classList.contains('open')));
   scrim.addEventListener('click', () => setOpen(false));
   rail.querySelectorAll('.nav a').forEach((a) => a.addEventListener('click', () => setOpen(false)));
-  const links = [...rail.querySelectorAll('.nav a')];
-  const io = new IntersectionObserver((es) => { for (const e of es) if (e.isIntersecting) links.forEach((a) => a.classList.toggle('on', a.dataset.sec === e.target.id)); }, { rootMargin: '-30% 0px -60% 0px' });
-  links.forEach((a) => { const t = document.getElementById(a.dataset.sec); if (t && (t.tagName !== 'ASIDE' || innerWidth <= 1100)) io.observe(t); });
+  const links = [...rail.querySelectorAll('.nav a')], views = [...document.querySelectorAll('[data-view]')];
+  const VIEWS = links.map((a) => a.dataset.go);
+  const go = () => {
+    const v = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'ozet';
+    document.body.dataset.view = v;
+    views.forEach((el) => { el.hidden = el.dataset.view !== v; });
+    links.forEach((a) => a.classList.toggle('on', a.dataset.go === v));
+    if (lastData) render(lastData), applyLang();
+    scrollTo(0, 0);
+  };
+  addEventListener('hashchange', go); go();
   const el = $('ct-intro'); if (!el) return;
   let seen = false; try { seen = sessionStorage.getItem('ctIntro') === '1'; } catch (e) {}
   if (seen || /[?&]intro=0/.test(location.search) || matchMedia('(prefers-reduced-motion: reduce)').matches) { el.remove(); return; }
