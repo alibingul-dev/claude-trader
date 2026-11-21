@@ -1,0 +1,11 @@
+{
+  "name": "claude-trader",
+  "version": "1.0.0",
+  "description": "Claude intraday paper trader — Binance USDT-M forward test (MCP + Azure Function)",
+  "main": "src/functions/*.js",
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@azure/data-tables": "^13.3.0",
+    "@azure/functions": "^4.5.0"
+  }
+}
