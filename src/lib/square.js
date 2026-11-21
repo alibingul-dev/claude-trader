@@ -36,9 +36,9 @@ async function square(kind, id, text) {
 }
 
 // ---------- coin record ----------
-async function record(symbol) {
+async function record(symbol, upto = Infinity) {
   let tr = [];
-  try { tr = (await db.list('trade')).filter((x) => x.symbol === symbol); } catch {}
+  try { tr = (await db.list('trade')).filter((x) => x.symbol === symbol && x.closedAt <= upto); } catch {}
   const n = tr.length, L = tr.filter((x) => x.side === 'LONG').length;
   const w = tr.filter((x) => x.net > 0), gw = w.reduce((a, x) => a + x.net, 0), gl = -tr.filter((x) => x.net <= 0).reduce((a, x) => a + x.net, 0);
   const pf = gl ? gw / gl : (n ? Infinity : null);
@@ -138,4 +138,18 @@ async function onClose(t) {
   return square('close', t.id, [...en, `${r.tag} #trading #crypto #papertrading`].join('\n'));
 }
 
-module.exports = { postOpen: onOpen, postClose: onClose, feedList: async () => (await db.list('feed')).sort((a, b) => (a.posted_at < b.posted_at ? 1 : -1)).slice(0, 60), _t: { openEN, openTR, closeEN, closeTR, record, recEN } };
+// Feed list; trades and positions from before the feed existed are backfilled once and stored.
+async function feedList() {
+  const stored = await db.list('feed');
+  const have = new Set(stored.map((x) => x.id));
+  const fid = (ts, id, kind) => `${new Date(ts).toISOString().slice(0, 10)}-trade-${id.toLowerCase()}-${kind}`;
+  const [trades, open] = await Promise.all([db.list('trade'), db.list('pos')]);
+  for (const t of trades) {
+    if (!have.has(fid(t.openedAt, t.id, 'open'))) { const r = await record(t.symbol, t.openedAt); await feed('open', { ...t, lev: t.lev }, openEN(t, r), openTR(t, r), t.openedAt); }
+    if (!have.has(fid(t.closedAt, t.id, 'close'))) { const r = await record(t.symbol, t.closedAt); await feed('close', t, closeEN(t, r), closeTR(t, r), t.closedAt); }
+  }
+  for (const p of open) if (!have.has(fid(p.openedAt, p.id, 'open'))) { const r = await record(p.symbol, p.openedAt); await feed('open', p, openEN(p, r), openTR(p, r), p.openedAt); }
+  return (await db.list('feed')).sort((a, b) => (a.posted_at < b.posted_at ? 1 : -1)).slice(0, 60);
+}
+
+module.exports = { postOpen: onOpen, postClose: onClose, feedList, _t: { openEN, openTR, closeEN, closeTR, record, recEN } };
