@@ -1,0 +1,138 @@
+// Stateless MCP server (Streamable HTTP, JSON responses) at /api/mcp/{token}
+const { app } = require('@azure/functions');
+const eng = require('../lib/engine');
+
+const TOOLS = [
+  {
+    name: 'hour_close',
+    description:
+      'Saatlik koşunun İLK çağrısı. Açık pozisyonları son kontrolden bu yana 1 dakikalık mumlarla dakika dakika oynatır (stop/TP/likidasyon/süre, funding), kapananları loglar, equity kaydı atar; ardından BTC + en hareketli USDT-M coinlerin kısa piyasa özetini döner.',
+    inputSchema: { type: 'object', properties: {} },
+    run: () => eng.hourClose(),
+  },
+  {
+    name: 'open_position',
+    description:
+      'Gerçek parayla açılmış gibi sanal pozisyon açar: mark fiyat + %0,05 kayma, %0,05 taker fee, isolated margin. Notional 6 USDT’den başlar, equity büyüdükçe büyür. Kaldıraç otomatik: stop likidasyon mesafesinin içinde kalan en yüksek kaldıraç (≤ DEFAULT_MAX_LEV). Hayatta kalma kuralı: serbest bakiye ≥ 10 stop zararı.',
+    inputSchema: {
+      type: 'object',
+      required: ['symbol', 'side', 'sl_pct', 'tp_pct', 'reason'],
+      properties: {
+        symbol: { type: 'string', description: 'ör. SOLUSDT' },
+        side: { type: 'string', enum: ['LONG', 'SHORT'] },
+        sl_pct: { type: 'number', description: 'Girişe göre stop mesafesi, % (0,3–10)' },
+        tp_pct: { type: 'number', description: 'Girişe göre TP mesafesi, %' },
+        max_hold_h: { type: 'number', description: 'En uzun tutma süresi, saat (varsayılan 24)' },
+        reason: { type: 'string', description: 'Giriş gerekçesi, kısa' },
+      },
+    },
+    run: (a) => eng.openPosition(a),
+  },
+  {
+    name: 'close_position',
+    description: 'Açık pozisyonu mark fiyattan kapatır (önce aradaki 1m mumlarda stop/TP olmuş mu kontrol eder).',
+    inputSchema: {
+      type: 'object',
+      required: ['id', 'reason'],
+      properties: { id: { type: 'string', description: 'ör. P12' }, reason: { type: 'string' } },
+    },
+    run: (a) => eng.closePosition(a),
+  },
+  {
+    name: 'log_decision',
+    description: 'Saatin kararını ve gerekçesini dashboard karar günlüğüne yazar. Her koşunun SON çağrısı.',
+    inputSchema: {
+      type: 'object',
+      required: ['summary'],
+      properties: {
+        summary: { type: 'string', description: 'Bu saatin kararı ve nedeni, 1–3 cümle' },
+        actions: { type: 'array', items: { type: 'string' }, description: 'ör. ["OPEN P12 SOLUSDT LONG", "HOLD P11"]' },
+      },
+    },
+    run: (a) => eng.logDecision(a),
+  },
+  {
+    name: 'performance',
+    description: 'Kasa, getiri %, max drawdown %, n, BSR %, WSR %, PF, net/fee/funding USDT, sürüm kırılımı, son 10 işlem.',
+    inputSchema: { type: 'object', properties: { version: { type: 'string', description: 'Opsiyonel: yalnız bu sürüm' } } },
+    run: (a) => eng.performance(a),
+  },
+  {
+    name: 'get_strategy',
+    description: 'Geçerli strateji sürümünün kuralları ve sürüm geçmişi.',
+    inputSchema: { type: 'object', properties: {} },
+    run: () => eng.getStrategy(),
+  },
+  {
+    name: 'set_strategy',
+    description: 'Yeni strateji sürümü kaydeder ve geçerli yapar. Sonraki işlemler bu sürümle etiketlenir.',
+    inputSchema: {
+      type: 'object',
+      required: ['version', 'rules', 'reason'],
+      properties: {
+        version: { type: 'string', description: 'v1, v2, v2.1 …' },
+        rules: { type: 'string', description: 'Giriş/çıkış/boyut kuralları, tam metin' },
+        reason: { type: 'string', description: 'Revizyon gerekçesi ve kanıtı (n, PF, WSR …)' },
+      },
+    },
+    run: (a) => eng.setStrategy(a),
+  },
+];
+
+const ok = (id, result) => ({ jsonrpc: '2.0', id, result });
+const err = (id, code, message) => ({ jsonrpc: '2.0', id, error: { code, message } });
+
+async function handle(m, ctx) {
+  if (!m || m.jsonrpc !== '2.0' || typeof m.method !== 'string') return err(m?.id ?? null, -32600, 'invalid request');
+  if (m.id === undefined || m.id === null) return null; // notification
+  switch (m.method) {
+    case 'initialize':
+      return ok(m.id, {
+        protocolVersion: m.params?.protocolVersion || '2025-06-18',
+        capabilities: { tools: { listChanged: false } },
+        serverInfo: { name: 'claude-trader', version: '1.0.0' },
+        instructions: 'Binance USDT-M paper trader. Her saat: hour_close → (gerekirse open/close) → log_decision.',
+      });
+    case 'ping':
+      return ok(m.id, {});
+    case 'tools/list':
+      return ok(m.id, { tools: TOOLS.map(({ run, ...t }) => t) });
+    case 'tools/call': {
+      const tool = TOOLS.find((t) => t.name === m.params?.name);
+      if (!tool) return err(m.id, -32602, `unknown tool ${m.params?.name}`);
+      try {
+        const res = await tool.run(m.params?.arguments || {});
+        return ok(m.id, { content: [{ type: 'text', text: JSON.stringify(res) }] });
+      } catch (e) {
+        ctx.warn(`tool ${tool.name} failed: ${e.message}`);
+        return ok(m.id, { content: [{ type: 'text', text: `HATA: ${e.message}` }], isError: true });
+      }
+    }
+    default:
+      return err(m.id, -32601, `method not found: ${m.method}`);
+  }
+}
+
+app.http('mcp', {
+  methods: ['POST', 'GET', 'DELETE'],
+  authLevel: 'anonymous',
+  route: 'mcp/{token}',
+  handler: async (req, ctx) => {
+    if (!process.env.MCP_TOKEN || req.params.token !== process.env.MCP_TOKEN) return { status: 401, body: 'unauthorized' };
+    if (req.method !== 'POST') return { status: 405, headers: { Allow: 'POST' } };
+    let body;
+    try {
+      body = await req.json();
+    } catch {
+      return { status: 400, jsonBody: err(null, -32700, 'parse error') };
+    }
+    const msgs = Array.isArray(body) ? body : [body];
+    const out = [];
+    for (const m of msgs) {
+      const r = await handle(m, ctx);
+      if (r) out.push(r);
+    }
+    if (!out.length) return { status: 202 };
+    return { status: 200, jsonBody: Array.isArray(body) ? out : out[0] };
+  },
+});
