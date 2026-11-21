@@ -214,6 +214,7 @@ async function hourClose() {
   await db.put('state', 'main', s);
   await db.put('equity', pad(now), { ts: now, wallet: s.wallet, equity, open: open.length });
   const market = await snapshot();
+  await db.put('market', 'last', { ts: now, market });
   return {
     ts_utc: new Date(now).toISOString(),
     version: s.version,
@@ -369,14 +370,15 @@ async function getStrategy() {
 }
 
 async function dashboardData() {
-  const [state, pos, trades, equity, decisions, strategies] = await Promise.all([
+  const [state, pos, trades, equity, decisions, strategies, market] = await Promise.all([
     getState(), db.list('pos'), db.list('trade'), db.list('equity'), db.list('decision'), db.list('strategy'),
+    db.getOne('market', 'last'),
   ]);
   return {
     generated_utc: new Date().toISOString(),
     config: { ...CFG, minQv: undefined, minQv_musdt: CFG.minQv / 1e6 },
     state, open: pos.map(compactPos), trades, equity: equity.slice(-3000),
-    decisions: decisions.slice(-300), strategies,
+    decisions: decisions.slice(-300), strategies, market,
   };
 }
 

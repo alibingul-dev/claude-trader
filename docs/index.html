@@ -15,7 +15,18 @@
 header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;padding:28px 32px 18px;border-bottom:1px solid var(--line)}
 h1{margin:0;font-size:20px;font-weight:600}h2{font-size:13px;font-weight:500;color:var(--mut);margin:0 0 12px;text-transform:uppercase;letter-spacing:.06em}
 .sub{color:var(--mut);font-size:13px}.pill{display:inline-block;padding:2px 10px;border-radius:99px;background:var(--panel2);border:1px solid var(--line);font-size:12px;margin-left:8px}
-main{padding:24px 32px 48px;max-width:1500px;margin:0 auto}
+main{padding:24px 0 48px;min-width:0}
+.wrap{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:16px;max-width:1880px;margin:0 auto;padding:0 32px}
+aside{position:sticky;top:0;height:100vh;padding:24px 0;display:flex;flex-direction:column}
+aside .card{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.feed{flex:1;overflow:hidden;position:relative;-webkit-mask-image:linear-gradient(#000 85%,transparent)}
+.feed .inner{will-change:transform}.feed.run .inner{animation:up var(--dur,60s) linear infinite}.feed:hover .inner{animation-play-state:paused}
+@keyframes up{to{transform:translateY(-50%)}}
+.ticker{overflow:hidden;border-bottom:1px solid var(--line);background:#0e1219;white-space:nowrap;-webkit-mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent)}
+.ticker .track{display:inline-block;padding:9px 0;animation:left var(--tdur,60s) linear infinite}.ticker:hover .track{animation-play-state:paused}
+@keyframes left{to{transform:translateX(-50%)}}
+.ti{display:inline-block;margin:0 22px;font-size:13px}.ti b{font-weight:600;margin-right:6px}.ti.sep{color:#2a3346}
+@media(prefers-reduced-motion:reduce){.ticker .track,.feed .inner{animation:none}}
 .hero{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:16px;margin-bottom:16px}
 .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:16px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;min-width:0}
@@ -33,10 +44,11 @@ td{padding:8px 10px;border-bottom:1px solid #1a2130;white-space:nowrap}tr:hover 
 .dec{padding:10px 0;border-bottom:1px solid #1a2130}.dec .t{color:var(--mut);font-size:12px}.dec .a{font-size:12px;color:var(--b)}
 #err{display:none;background:#3a1820;border:1px solid var(--r);color:#ffd0d5;padding:14px 18px;border-radius:12px;margin-bottom:16px}
 .bar{height:6px;border-radius:3px;background:var(--panel2);overflow:hidden;margin-top:8px}.bar>i{display:block;height:100%;background:var(--g)}
-@media(max-width:1100px){.hero,.grid2,.grid3{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:1100px){.hero,.grid2,.grid3,.wrap{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}aside{position:static;height:600px}}
 </style>
 </head>
 <body>
+<div class="ticker"><div class="track mono" id="tick">yükleniyor…</div></div>
 <header>
   <div>
     <h1>Claude Trader <span class="pill" id="ver">—</span></h1>
@@ -44,6 +56,7 @@ td{padding:8px 10px;border-bottom:1px solid #1a2130;white-space:nowrap}tr:hover 
   </div>
   <div class="sub mono" id="upd">yükleniyor…</div>
 </header>
+<div class="wrap">
 <main>
   <div id="err"></div>
 
@@ -77,10 +90,10 @@ td{padding:8px 10px;border-bottom:1px solid #1a2130;white-space:nowrap}tr:hover 
 
   <section class="card" style="margin-bottom:16px"><h2>İşlem geçmişi</h2><div class="scroll"><table id="tTr"></table></div></section>
 
-  <section class="card" style="margin-bottom:16px"><h2>Karar günlüğü</h2><div class="scroll" id="dec"></div></section>
-
   <section class="card"><h2>Strateji sürümleri</h2><div class="scroll"><table id="tVer"></table></div></section>
 </main>
+<aside><div class="card"><h2>Karar günlüğü</h2><div class="feed" id="feed"><div class="inner" id="dec"></div></div></div></aside>
+</div>
 <script>
 const $ = (id) => document.getElementById(id);
 const f = (x, d = 2) => x == null || !isFinite(x) ? '—' : Number(x).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -163,7 +176,19 @@ function render(d) {
   $('tTr').innerHTML = '<tr><th>Kapanış (TSİ)</th><th>ID</th><th>Coin</th><th>Yön</th><th>Kaldıraç</th><th>Giriş (USDT)</th><th>Çıkış (USDT)</th><th>Neden</th><th>Süre (dk)</th><th>Fee (USDT)</th><th>Funding (USDT)</th><th>Net (USDT)</th><th>Margin ROI (%)</th><th>MFE (%)</th><th>Sürüm</th></tr>' +
     [...tr].reverse().map((t) => `<tr title="${(t.reason || '').replace(/"/g, '&quot;')}"><td>${tsi(t.closedAt)}</td><td>${t.id}</td><td>${t.symbol}</td><td><span class="tag ${t.side[0]}">${t.side}</span></td><td class="mono">${t.lev}x</td><td class="mono">${fp(t.entry)}</td><td class="mono">${fp(t.exit)}</td><td>${t.exitReason}</td><td class="mono">${t.holdMin}</td><td class="mono">${f(-(t.feeIn + t.feeOut), 4)}</td><td class="mono">${sg(t.funding, 4)}</td><td class="mono ${cls(t.net)}">${sg(t.net, 4)}</td><td class="mono ${cls(t.roiMarginPct)}">${sg(t.roiMarginPct, 1)}</td><td class="mono">${f(t.mfe)}</td><td>${t.version}</td></tr>`).join('');
 
-  $('dec').innerHTML = [...d.decisions].reverse().map((x) => `<div class="dec"><div class="t">${tsi(x.ts)} TSİ · ${x.version}</div><div>${x.summary.replace(/</g, '&lt;')}</div>${x.actions?.length ? `<div class="a mono">${x.actions.join(' · ')}</div>` : ''}</div>`).join('') || '<div class="sub">Henüz karar yok</div>';
+  const decHtml = [...d.decisions].reverse().map((x) => `<div class="dec"><div class="t">${tsi(x.ts)} TSİ · ${x.version}</div><div>${x.summary.replace(/</g, '&lt;')}</div>${x.actions?.length ? `<div class="a mono">${x.actions.join(' · ')}</div>` : ''}</div>`).join('') || '<div class="sub">Henüz karar yok</div>';
+  const feed = $('feed'), inner = $('dec');
+  feed.classList.remove('run'); inner.innerHTML = decHtml;
+  if (inner.scrollHeight > feed.clientHeight + 10) { inner.innerHTML = decHtml + decHtml; feed.style.setProperty('--dur', `${Math.max(30, d.decisions.length * 6)}s`); feed.classList.add('run'); }
+
+  const it = [];
+  for (const m of d.market?.market || []) it.push(`<span class="ti"><b>${m.s.replace('USDT', '')}</b>${fp(m.px)} USDT <span class="${cls(m.ch24)}">${sg(m.ch24, 2)} % (24s)</span> <span class="${cls(m.ch1h)}">${sg(m.ch1h, 2)} % (1s)</span></span>`);
+  for (const p of d.open) it.push(`<span class="ti"><b>${p.id} ${p.sym.replace('USDT', '')} ${p.side} ${p.lev}x</b><span class="${cls(p.upnl_usdt)}">${sg(p.upnl_usdt, 4)} USDT</span></span>`);
+  it.push(`<span class="ti"><b>Equity</b>${f(eqLast, 4)} USDT <span class="${cls(net)}">${sg(ret, 2)} %</span></span>`);
+  if (d.market?.ts) it.push(`<span class="ti" style="color:var(--mut)">piyasa özeti ${tsi(d.market.ts)} TSİ</span>`);
+  const one = it.join('<span class="ti sep">·</span>');
+  $('tick').innerHTML = one + '<span class="ti sep">·</span>' + one;
+  $('tick').style.setProperty('--tdur', `${Math.max(40, it.length * 6)}s`);
 
   $('tVer').innerHTML = '<tr><th>Sürüm</th><th>Tarih (TSİ)</th><th>İşlem (adet)</th><th>Net (USDT)</th><th>PF</th><th>WSR (%)</th><th>BSR (%)</th><th>Gerekçe</th></tr>' +
     [...d.strategies].reverse().map((v) => { const s = stats(tr.filter((t) => t.version === v.version)); return `<tr title="${v.rules.replace(/"/g, '&quot;')}"><td><b>${v.version}</b></td><td>${tsi(v.at)}</td><td class="mono">${s.n}</td><td class="mono ${cls(s.net)}">${sg(s.net, 4)}</td><td class="mono">${s.pf === Infinity ? '∞' : f(s.pf, 3)}</td><td class="mono">${f(s.wsr, 1)}</td><td class="mono">${f(s.bsr, 1)}</td><td style="white-space:normal;max-width:520px">${(v.reason || '').replace(/</g, '&lt;')}</td></tr>`; }).join('');
