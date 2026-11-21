@@ -22,7 +22,8 @@ async function post(kind, id, text) {
   let res, body = text;
   try {
     res = await send(body);
-    if (res.code === '20041') { body = text.replace(/\n?.*https?:\/\/\S+.*$/m, ''); res = await send(body); } // link rejected → post without it
+    if (res.code === '20041') { body = body.replace(/\n?.*https?:\/\/\S+.*$/m, ''); res = await send(body); } // link rejected → post without it
+    if (res.code === '20002' || res.code === '20022') { body = body.replace(/shitcoin/gi, 'trash coin'); res = await send(body); } // sensitive word → softer wording
   } catch (e) { res = { code: 'FETCH', message: e.message }; }
   const ok = res.code === '000000';
   const out = { ts: Date.now(), kind, pos: id, ok, code: res.code, message: res.message || null, postId: res.data?.id || null, url: res.data?.id ? `https://www.binance.com/square/post/${res.data.id}` : null };
@@ -37,17 +38,29 @@ async function record(symbol) {
   let tr = [];
   try { tr = (await db.list('trade')).filter((x) => x.symbol === symbol); } catch {}
   const tag = `$${coin(symbol)}`;
-  if (!tr.length) return pick([`First time trading ${tag} here.`, `New coin for me, no history on ${tag} yet.`]);
+  if (!tr.length) return { line: pick([`First time trading ${tag} here.`, `New coin for me, no history on ${tag} yet.`]), v: '' };
   const L = tr.filter((x) => x.side === 'LONG').length, S = tr.length - L;
   const w = tr.filter((x) => x.net > 0), gw = w.reduce((a, x) => a + x.net, 0), gl = -tr.filter((x) => x.net <= 0).reduce((a, x) => a + x.net, 0);
   const wr = Math.round((w.length / tr.length) * 100);
   const pf = gl ? (gw / gl).toFixed(2) : null;
   const side = [L && `${L} long`, S && `${S} short`].filter(Boolean).join(' / ');
   const pfTxt = pf == null ? 'no losing trade yet' : `profit factor ${pf}`;
-  return pick([
+  const v = verdict(tr.length, w.length, pf == null ? Infinity : +pf, tag);
+  return { v, line: pick([
     `My ${tag} record so far: ${tr.length} trade${tr.length > 1 ? 's' : ''} (${side}), ${wr}% win rate, ${pfTxt}.`,
     `${tag} track record: ${tr.length} trade${tr.length > 1 ? 's' : ''}, ${side}, won ${wr}% of them, ${pfTxt}.`,
-  ]);
+  ]) };
+}
+
+// Performance label for the coin; needs at least 3 closed trades to judge.
+function verdict(n, wins, pf, tag) {
+  if (n < 3) return pick([`Too early to judge ${tag}.`, `Not enough trades to call ${tag} yet.`]);
+  if (pf === Infinity) return pick([`${tag} is my star so far ⭐`, `Can't lose on ${tag} lately 🌟`]);
+  if (pf >= 2) return pick([`${tag} = star coin for me ⭐`, `${tag} keeps paying, star material ⭐`]);
+  if (pf >= 1.2) return pick([`${tag} is a solid one 👍`, `${tag} treats me well 👍`]);
+  if (pf >= 0.8) return pick([`${tag} is a coin flip so far 🪙`, `${tag} = pure coin flip for me 🪙`]);
+  if (pf >= 0.4 && wins > 0) return pick([`${tag} gives me headaches 🤕`, `${tag} and me don't get along 🤕`]);
+  return pick([`${tag} = certified shitcoin for me 💩`, `${tag} is a shitcoin in my book 💩`]);
 }
 const pct = (a, b) => Math.abs((b / a - 1) * 100).toFixed(1);
 
@@ -62,7 +75,7 @@ function openText(p, rec) {
     `${fp(p.entry)} entry, invalidation ${fp(p.sl)}, aiming for ${fp(p.tp)}.`,
   ]);
   const tail = pick([`Small size, ${p.lev}x, paper account.`, `${p.lev}x isolated, tiny size, paper.`, `Paper trade, ${p.lev}x. Let's see 🤞`, `${p.lev}x on the paper account. We'll see how it plays out 🍿`]);
-  return [hook, plan, tail, rec, `${t} #trading #crypto #papertrading`].join('\n');
+  return [hook, plan, tail, rec.line, rec.v, `${t} #trading #crypto #papertrading`].filter(Boolean).join('\n');
 }
 
 function closeText(t, rec) {
@@ -77,7 +90,7 @@ function closeText(t, rec) {
   else line = pick([`Closed ${tag} manually. ${n}.`, `Got out of ${tag} early. ${n}.`]);
   const detail = pick([`${fp(t.entry)} → ${fp(t.exit)} (${move}%), held ${t.holdMin} min.`, `Entry ${fp(t.entry)}, out ${fp(t.exit)}. ${t.holdMin} min in the trade.`]);
   const after = t.net > 0 ? pick([`On to the next 💪`, `Taking it.`, `Good one 🍀`]) : pick([`Part of the game.`, `Next one 👊`, `Losses are logged too.`]);
-  return [line, detail, rec, after, `${tag} #trading #crypto #papertrading`].join('\n');
+  return [line, detail, after, rec.line, rec.v, `${tag} #trading #crypto #papertrading`].filter(Boolean).join('\n');
 }
 
 module.exports = {
