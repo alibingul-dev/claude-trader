@@ -31,9 +31,27 @@ async function post(kind, id, text) {
 }
 
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
+
+// Coin track record from closed real trades: count, long/short split, win rate %, profit factor.
+async function record(symbol) {
+  let tr = [];
+  try { tr = (await db.list('trade')).filter((x) => x.symbol === symbol); } catch {}
+  const tag = `$${coin(symbol)}`;
+  if (!tr.length) return pick([`First time trading ${tag} here.`, `New coin for me, no history on ${tag} yet.`]);
+  const L = tr.filter((x) => x.side === 'LONG').length, S = tr.length - L;
+  const w = tr.filter((x) => x.net > 0), gw = w.reduce((a, x) => a + x.net, 0), gl = -tr.filter((x) => x.net <= 0).reduce((a, x) => a + x.net, 0);
+  const wr = Math.round((w.length / tr.length) * 100);
+  const pf = gl ? (gw / gl).toFixed(2) : null;
+  const side = [L && `${L} long`, S && `${S} short`].filter(Boolean).join(' / ');
+  const pfTxt = pf == null ? 'no losing trade yet' : `profit factor ${pf}`;
+  return pick([
+    `My ${tag} record so far: ${tr.length} trade${tr.length > 1 ? 's' : ''} (${side}), ${wr}% win rate, ${pfTxt}.`,
+    `${tag} track record: ${tr.length} trade${tr.length > 1 ? 's' : ''}, ${side}, won ${wr}% of them, ${pfTxt}.`,
+  ]);
+}
 const pct = (a, b) => Math.abs((b / a - 1) * 100).toFixed(1);
 
-function openText(p) {
+function openText(p, rec) {
   const t = `$${coin(p.symbol)}`, up = p.side === 'LONG';
   const hook = up
     ? pick([`${t} still has legs, going long here 🚀`, `Longing ${t}. Momentum hasn't cooled off yet 🔥`, `${t} keeps pushing, I'm in long 📈`, `Taking a long on ${t}, volume is there 👀`, `${t} looks like it wants more. Long 💪`])
@@ -44,10 +62,10 @@ function openText(p) {
     `${fp(p.entry)} entry, invalidation ${fp(p.sl)}, aiming for ${fp(p.tp)}.`,
   ]);
   const tail = pick([`Small size, ${p.lev}x, paper account.`, `${p.lev}x isolated, tiny size, paper.`, `Paper trade, ${p.lev}x. Let's see 🤞`, `${p.lev}x on the paper account. We'll see how it plays out 🍿`]);
-  return [hook, plan, tail, `${t} #trading #crypto #papertrading`].join('\n');
+  return [hook, plan, tail, rec, `${t} #trading #crypto #papertrading`].join('\n');
 }
 
-function closeText(t) {
+function closeText(t, rec) {
   const tag = `$${coin(t.symbol)}`, n = `${sg(t.net)} USDT`, move = pct(t.entry, t.exit);
   const quick = t.holdMin <= 15;
   let line;
@@ -59,7 +77,11 @@ function closeText(t) {
   else line = pick([`Closed ${tag} manually. ${n}.`, `Got out of ${tag} early. ${n}.`]);
   const detail = pick([`${fp(t.entry)} → ${fp(t.exit)} (${move}%), held ${t.holdMin} min.`, `Entry ${fp(t.entry)}, out ${fp(t.exit)}. ${t.holdMin} min in the trade.`]);
   const after = t.net > 0 ? pick([`On to the next 💪`, `Taking it.`, `Good one 🍀`]) : pick([`Part of the game.`, `Next one 👊`, `Losses are logged too.`]);
-  return [line, detail, after, `${tag} #trading #crypto #papertrading`].join('\n');
+  return [line, detail, rec, after, `${tag} #trading #crypto #papertrading`].join('\n');
 }
 
-module.exports = { postOpen: (p) => post('open', p.id, openText(p)), postClose: (t) => post('close', t.id, closeText(t)), _t: { openText, closeText } };
+module.exports = {
+  postOpen: async (p) => post('open', p.id, openText(p, await record(p.symbol))),
+  postClose: async (t) => post('close', t.id, closeText(t, await record(t.symbol))),
+  _t: { openText, closeText, record },
+};
