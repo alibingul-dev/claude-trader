@@ -2,6 +2,7 @@
 // Units: prices in USDT, amounts in USDT, percentages in %.
 const bn = require('./binance');
 const db = require('./store');
+const square = require('./square');
 
 const CFG = {
   fee: +(process.env.TAKER_FEE ?? 0.0005), // 0.05 % taker, per side
@@ -141,6 +142,7 @@ async function settle(pos, exit, s, book = REAL) {
   };
   await db.put(book.trade, `${pad(exit.ts)}_${pos.id}`, t);
   await db.del(book.pos, pos.id);
+  if (book === REAL) t.square = await square.postClose(t);
   return t;
 }
 
@@ -159,6 +161,7 @@ async function processPos(pos, s, now, book = REAL) {
 const compactTrade = (t) => ({
   id: t.id, sym: t.symbol, side: t.side, exit_reason: t.exitReason, hold_min: t.holdMin,
   net_usdt: rd(t.net, 4), roi_margin_pct: rd(t.roiMarginPct, 1), mfe_pct: rd(t.mfe, 2), version: t.version,
+  ...(t.square ? { square: t.square.ok ? t.square.url || 'ok' : t.square.skipped || `HATA ${t.square.code}` } : {}),
 });
 
 // ---------- market snapshot ----------
@@ -260,7 +263,8 @@ async function openPosition({ symbol, side, sl_pct, tp_pct, max_hold_h = 24, rea
   s.wallet -= pos.feeIn;
   await db.put('pos', pos.id, pos);
   await db.put('state', 'main', s);
-  return { opened: { ...compactPos(pos), coin_max_lev: lim.cap, lev_source: lim.src }, wallet_usdt: rd(s.wallet) };
+  const sq = await square.postOpen(pos);
+  return { opened: { ...compactPos(pos), coin_max_lev: lim.cap, lev_source: lim.src }, wallet_usdt: rd(s.wallet), square: sq };
 }
 
 function checkArgs({ symbol, side, sl_pct, tp_pct, max_hold_h }) {
