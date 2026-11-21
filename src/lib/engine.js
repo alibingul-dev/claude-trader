@@ -122,7 +122,7 @@ async function applyFunding(pos, s, endTs) {
   pos.fundingCheckedTs = endTs;
 }
 
-async function settle(pos, exit, s) {
+async function settle(pos, exit, s, book = REAL) {
   const liq = exit.reason === 'LİKİDASYON';
   const px = liq ? pos.liq : exit.price * (1 - pos.dir * CFG.slip);
   let gross = pos.qty * (px - pos.entry) * pos.dir;
@@ -139,17 +139,20 @@ async function settle(pos, exit, s) {
     roiMarginPct: (net / pos.margin) * 100, mfe: pos.mfe, mae: pos.mae,
     exitReason: exit.reason, walletAfter: s.wallet,
   };
-  await db.put('trade', `${pad(exit.ts)}_${pos.id}`, t);
-  await db.del('pos', pos.id);
+  await db.put(book.trade, `${pad(exit.ts)}_${pos.id}`, t);
+  await db.del(book.pos, pos.id);
   return t;
 }
 
-async function processPos(pos, s, now) {
+const REAL = { pos: 'pos', trade: 'trade' };
+const SHADOW = { pos: 'spos', trade: 'strade' }; // skipped candidates: same simulation, never touches the wallet
+
+async function processPos(pos, s, now, book = REAL) {
   const kl = await klinesSince(pos.symbol, pos.checkedTs, now);
   const exit = replay(pos, kl, now);
   await applyFunding(pos, s, exit ? exit.ts : now);
-  if (exit) return settle(pos, exit, s);
-  await db.put('pos', pos.id, pos);
+  if (exit) return settle(pos, exit, s, book);
+  await db.put(book.pos, pos.id, pos);
   return null;
 }
 
@@ -208,6 +211,12 @@ async function hourClose() {
     const t = await processPos(pos, s, now);
     if (t) closed.push(t);
   }
+  const ghost = { wallet: 0 };
+  const skippedClosed = [];
+  for (const sp of await db.list('spos')) {
+    const t = await processPos(sp, ghost, now, SHADOW);
+    if (t) skippedClosed.push(t);
+  }
   const open = await db.list('pos');
   const upnl = open.reduce((a, p) => a + p.qty * ((p.last ?? p.entry) - p.entry) * p.dir, 0);
   const equity = s.wallet + upnl;
@@ -222,6 +231,8 @@ async function hourClose() {
     next_notional_usdt: notionalFor(s, equity), max_open: CFG.maxOpen,
     closed_this_hour: closed.map(compactTrade),
     open: open.map(compactPos),
+    skipped_closed_this_hour: skippedClosed.map(compactTrade),
+    skipped_open: (await db.list('spos')).map(compactPos),
     market_keys: 'px USDT · ch24/ch4h/ch1h % · atr1h % (14x1h) · vr = son 1h hacim / 24h ort · rng 0..1 = 24h aralıktaki yeri · fund % / 8h · qvM M USDT',
     market,
   };
@@ -231,16 +242,37 @@ async function openPosition({ symbol, side, sl_pct, tp_pct, max_hold_h = 24, rea
   symbol = String(symbol || '').toUpperCase();
   side = String(side || '').toUpperCase();
   sl_pct = +sl_pct; tp_pct = +tp_pct; max_hold_h = +max_hold_h;
-  if (!['LONG', 'SHORT'].includes(side)) throw new Error('side LONG veya SHORT olmalı');
-  if (!(sl_pct >= 0.3 && sl_pct <= 10)) throw new Error('sl_pct 0.3–10 % aralığında olmalı');
-  if (!(tp_pct > 0)) throw new Error('tp_pct > 0 olmalı');
-  if (!(max_hold_h > 0 && max_hold_h <= 72)) throw new Error('max_hold_h 0–72 saat');
+  checkArgs({ symbol, side, sl_pct, tp_pct, max_hold_h });
   const s = await getState();
   if (s.version === 'v0') throw new Error('Önce set_strategy ile bir strateji sürümü kaydet');
   const open = await db.list('pos');
   if (open.length >= CFG.maxOpen) throw new Error(`En fazla ${CFG.maxOpen} açık pozisyon`);
   if (open.some((p) => p.symbol === symbol)) throw new Error(`${symbol} için zaten açık pozisyon var`);
 
+  const { pos, lim } = await buildPos({ symbol, side, sl_pct, tp_pct, max_hold_h, reason }, s, open);
+  const free = s.wallet - open.reduce((a, p) => a + p.margin, 0);
+  const maxLoss = pos.notional * (sl_pct / 100 + 2 * CFG.fee + 2 * CFG.slip);
+  if (free < pos.margin + pos.feeIn) throw new Error(`Serbest bakiye yetersiz: ${rd(free)} USDT`);
+  if (free < CFG.survivalStops * maxLoss)
+    throw new Error(`Hayatta kalma kuralı: serbest bakiye ${rd(free)} USDT < 10 stop × ${rd(maxLoss)} USDT`);
+  s.seq += 1;
+  pos.id = `P${s.seq}`;
+  s.wallet -= pos.feeIn;
+  await db.put('pos', pos.id, pos);
+  await db.put('state', 'main', s);
+  return { opened: { ...compactPos(pos), coin_max_lev: lim.cap, lev_source: lim.src }, wallet_usdt: rd(s.wallet) };
+}
+
+function checkArgs({ symbol, side, sl_pct, tp_pct, max_hold_h }) {
+  if (!['LONG', 'SHORT'].includes(side)) throw new Error('side LONG veya SHORT olmalı');
+  if (!(sl_pct >= 0.3 && sl_pct <= 10)) throw new Error('sl_pct 0.3–10 % aralığında olmalı');
+  if (!(tp_pct > 0)) throw new Error('tp_pct > 0 olmalı');
+  if (!(max_hold_h > 0 && max_hold_h <= 72)) throw new Error('max_hold_h 0–72 saat');
+  if (!symbol) throw new Error('symbol gerekli');
+}
+
+// Same entry, size, leverage, fees and liquidation as a real opening, without balance checks.
+async function buildPos({ symbol, side, sl_pct, tp_pct, max_hold_h, reason }, s, open) {
   const [pi, info] = await Promise.all([bn.premium(symbol), bn.exchangeInfo()]);
   const sym = info.symbols.find((x) => x.symbol === symbol);
   if (!sym || sym.status !== 'TRADING' || sym.contractType !== 'PERPETUAL')
@@ -259,16 +291,9 @@ async function openPosition({ symbol, side, sl_pct, tp_pct, max_hold_h = 24, rea
   const entry = mark * (1 + dir * CFG.slip);
   const qty = notional / entry;
   const feeIn = notional * CFG.fee;
-  const free = s.wallet - open.reduce((a, p) => a + p.margin, 0);
-  const maxLoss = notional * (sl_pct / 100 + 2 * CFG.fee + 2 * CFG.slip);
-  if (free < margin + feeIn) throw new Error(`Serbest bakiye yetersiz: ${rd(free)} USDT`);
-  if (free < CFG.survivalStops * maxLoss)
-    throw new Error(`Hayatta kalma kuralı: serbest bakiye ${rd(free)} USDT < 10 stop × ${rd(maxLoss)} USDT`);
-
-  s.seq += 1;
   const now = Date.now();
   const pos = {
-    id: `P${s.seq}`, symbol, side, dir, lev, mark, entry, qty, notional, margin, feeIn, funding: 0,
+    id: '', symbol, side, dir, lev, mark, entry, qty, notional, margin, feeIn, funding: 0,
     sl_pct, tp_pct,
     sl: entry * (1 - (dir * sl_pct) / 100),
     tp: entry * (1 + (dir * tp_pct) / 100),
@@ -277,10 +302,25 @@ async function openPosition({ symbol, side, sl_pct, tp_pct, max_hold_h = 24, rea
     openedAt: now, checkedTs: now, fundingCheckedTs: now, maxHoldMs: max_hold_h * 3.6e6,
     version: s.version, reason: String(reason).slice(0, 500), mfe: 0, mae: 0,
   };
-  s.wallet -= feeIn;
-  await db.put('pos', pos.id, pos);
+  return { pos, lim };
+}
+
+async function skipPosition({ symbol, side, sl_pct, tp_pct, max_hold_h = 24, reason = '' }) {
+  symbol = String(symbol || '').toUpperCase();
+  side = String(side || '').toUpperCase();
+  sl_pct = +sl_pct; tp_pct = +tp_pct; max_hold_h = +max_hold_h;
+  checkArgs({ symbol, side, sl_pct, tp_pct, max_hold_h });
+  const s = await getState();
+  const open = await db.list('pos');
+  if ((await db.list('spos')).some((p) => p.symbol === symbol && p.side === side))
+    throw new Error(`${symbol} ${side} zaten pas geçilenler listesinde izleniyor`);
+  const { pos } = await buildPos({ symbol, side, sl_pct, tp_pct, max_hold_h, reason }, s, open);
+  s.sseq = (s.sseq || 0) + 1;
+  pos.id = `S${s.sseq}`;
+  pos.skipped = true;
+  await db.put('spos', pos.id, pos);
   await db.put('state', 'main', s);
-  return { opened: { ...compactPos(pos), coin_max_lev: lim.cap, lev_source: lim.src }, wallet_usdt: rd(s.wallet) };
+  return { skipped: compactPos(pos), note: 'Kasaya dokunmaz; açılsaydı ne olurdu diye 1m mumlarla izlenir.' };
 }
 
 async function closePosition({ id, reason = '' }) {
@@ -370,19 +410,20 @@ async function getStrategy() {
 }
 
 async function dashboardData() {
-  const [state, pos, trades, equity, decisions, strategies, market] = await Promise.all([
+  const [state, pos, trades, equity, decisions, strategies, market, spos, strades] = await Promise.all([
     getState(), db.list('pos'), db.list('trade'), db.list('equity'), db.list('decision'), db.list('strategy'),
-    db.getOne('market', 'last'),
+    db.getOne('market', 'last'), db.list('spos'), db.list('strade'),
   ]);
   return {
     generated_utc: new Date().toISOString(),
     config: { ...CFG, minQv: undefined, minQv_musdt: CFG.minQv / 1e6 },
     state, open: pos.map(compactPos), trades, equity: equity.slice(-3000),
     decisions: decisions.slice(-300), strategies, market,
+    skipped_open: spos.map(compactPos), skipped: strades.slice(-1000),
   };
 }
 
 module.exports = {
-  hourClose, openPosition, closePosition, performance, logDecision, setStrategy, getStrategy, dashboardData,
+  hourClose, openPosition, skipPosition, closePosition, performance, logDecision, setStrategy, getStrategy, dashboardData,
   _test: { replay, leverageFor, notionalFor, CFG },
 };

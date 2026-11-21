@@ -29,6 +29,24 @@ const TOOLS = [
     run: (a) => eng.openPosition(a),
   },
   {
+    name: 'skip_position',
+    description:
+      'Değerlendirip AÇMADIĞIN her aday için çağır. open_position ile aynı giriş, kaldıraç, fee ve likidasyon hesabıyla gölge pozisyon kaydeder; kasaya dokunmaz. hour_close her saat bunları da 1m mumlarla izler, "açsaydım ne olurdu" sonucunu ayrı tabloya yazar.',
+    inputSchema: {
+      type: 'object',
+      required: ['symbol', 'side', 'sl_pct', 'tp_pct', 'reason'],
+      properties: {
+        symbol: { type: 'string', description: 'ör. SOLUSDT' },
+        side: { type: 'string', enum: ['LONG', 'SHORT'] },
+        sl_pct: { type: 'number', description: 'Açsaydın kullanacağın stop, % (0,3–10)' },
+        tp_pct: { type: 'number', description: 'Açsaydın kullanacağın TP, %' },
+        max_hold_h: { type: 'number', description: 'En uzun tutma süresi, saat (varsayılan 24)' },
+        reason: { type: 'string', description: 'Neden açmadın, kısa (hangi koşul tutmadı ya da hangi risk)' },
+      },
+    },
+    run: (a) => eng.skipPosition(a),
+  },
+  {
     name: 'close_position',
     description: 'Açık pozisyonu mark fiyattan kapatır (önce aradaki 1m mumlarda stop/TP olmuş mu kontrol eder).',
     inputSchema: {
