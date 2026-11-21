@@ -225,13 +225,14 @@ const EXACT = { 'İşlem': 'Trades', 'adet': 'count', 'işlem': 'trades', 'dk': 
 let lang = 'tr';
 try { lang = localStorage.getItem('ct-lang') || 'tr'; } catch (e) {}
 const qLang = (location.search.match(/[?&]lang=(tr|en)/) || [])[1]; if (qLang) lang = qLang;
-const T = (s) => { if (lang !== 'en' || s == null) return s; s = String(s); const t = s.trim(); if (EXACT[t]) return s.replace(t, EXACT[t]); for (const [a, b] of PHR) if (s.includes(a)) s = s.split(a).join(b); return s; };
+const Ten = (s) => { if (s == null) return s; s = String(s); const t = s.trim(); if (EXACT[t]) return s.replace(t, EXACT[t]); for (const [a, b] of PHR) if (s.includes(a)) s = s.split(a).join(b); return s; };
+const T = (s) => (lang === 'en' ? Ten(s) : s);
 const orig = new WeakMap();
 function applyLang() {
   document.documentElement.lang = lang;
   document.querySelectorAll('.lang button').forEach((b) => b.classList.toggle('on', b.dataset.l === lang));
   const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, { acceptNode: (n) => n.parentElement.closest('script,style,.raw') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
-  for (let n = w.nextNode(); n; n = w.nextNode()) { if (!orig.has(n) || (n.nodeValue !== T(orig.get(n)) && n.nodeValue !== orig.get(n))) orig.set(n, n.nodeValue); n.nodeValue = T(orig.get(n)); }
+  for (let n = w.nextNode(); n; n = w.nextNode()) { if (!orig.has(n) || (n.nodeValue !== orig.get(n) && n.nodeValue !== Ten(orig.get(n)))) orig.set(n, n.nodeValue); n.nodeValue = T(orig.get(n)); }
 }
 let lastData = null;
 document.querySelectorAll('.lang button').forEach((b) => b.addEventListener('click', () => {
@@ -348,7 +349,7 @@ function render(d) {
   feed.classList.remove('run'); inner.innerHTML = decHtml;
 
   const it = [];
-  for (const p of d.open) it.push(`<span class="ti"><b>Açık pozisyon · ${p.sym.replace('USDT', '')} ${p.side} ${p.lev}x</b><span class="${cls(p.upnl_usdt)}">${sg(p.upnl_usdt, 4)} USDT</span></span>`);
+  for (const p of d.open) it.push(`<span class="ti" style="color:var(--a)"><b>⭐ Açık pozisyon · ${p.sym.replace('USDT', '')} ${p.side} ${p.lev}x</b><span class="${cls(p.upnl_usdt)}">${sg(p.upnl_usdt, 4)} USDT</span></span>`);
   it.push(`<span class="ti"><b>Equity</b>${f(eqLast, 4)} USDT <span class="${cls(net)}">${sg(ret, 2)} %</span></span>`);
   if (d.market?.market?.length) it.push(`<span class="ti" style="color:var(--a)">İzlenen hareketli coinler (pozisyon değil) ›</span>`);
   for (const m of d.market?.market || []) it.push(`<span class="ti"><b>${m.s.replace('USDT', '')}</b>${fp(m.px)} USDT <span class="${cls(m.ch24)}">${sg(m.ch24, 2)} % (24s)</span> <span class="${cls(m.ch1h)}">${sg(m.ch1h, 2)} % (1s)</span></span>`);
