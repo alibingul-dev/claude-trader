@@ -24,8 +24,8 @@ aside .card{flex:1;display:flex;flex-direction:column;overflow:hidden}
 .feed .inner{will-change:transform}.feed.run .inner{animation:up var(--dur,60s) linear infinite}.feed:hover .inner{animation-play-state:paused}
 @keyframes up{to{transform:translateY(-50%)}}
 .ticker{position:sticky;top:0;z-index:5;height:38px;overflow:hidden;border-bottom:1px solid var(--line);background:#0e1219;white-space:nowrap;-webkit-mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent)}
-.ticker .track{display:inline-block;padding:9px 0;animation:left var(--tdur,60s) linear infinite}.ticker:hover .track{animation-play-state:paused}
-@keyframes left{to{transform:translateX(-50%)}}
+.ticker .track{display:inline-block;padding:9px 0 9px 100%;animation:left var(--tdur,60s) linear infinite}.ticker:hover .track{animation-play-state:paused}
+@keyframes left{to{transform:translateX(-100%)}}
 .ti{display:inline-block;margin:0 22px;font-size:13px}.ti b{font-weight:600;margin-right:6px}.ti.sep{color:#2a3346}
 @media(prefers-reduced-motion:reduce){.ticker .track,.feed .inner{animation:none}}
 .hero{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:16px;margin-bottom:16px}
@@ -189,9 +189,9 @@ function render(d) {
   for (const p of d.open) it.push(`<span class="ti"><b>${p.id} ${p.sym.replace('USDT', '')} ${p.side} ${p.lev}x</b><span class="${cls(p.upnl_usdt)}">${sg(p.upnl_usdt, 4)} USDT</span></span>`);
   it.push(`<span class="ti"><b>Equity</b>${f(eqLast, 4)} USDT <span class="${cls(net)}">${sg(ret, 2)} %</span></span>`);
   if (d.market?.ts) it.push(`<span class="ti" style="color:var(--mut)">piyasa özeti ${tsi(d.market.ts)} TSİ</span>`);
-  const one = it.join('<span class="ti sep">·</span>');
-  $('tick').innerHTML = one + '<span class="ti sep">·</span>' + one;
-  $('tick').style.setProperty('--tdur', `${Math.max(40, it.length * 6)}s`);
+  const tick = $('tick');
+  tick.innerHTML = it.join('<span class="ti sep">·</span>');
+  tick.style.setProperty('--tdur', `${Math.round(tick.scrollWidth / 70)}s`);
 
   $('tVer').innerHTML = '<tr><th>Sürüm</th><th>Tarih (TSİ)</th><th>İşlem (adet)</th><th>Net (USDT)</th><th>PF</th><th>WSR (%)</th><th>BSR (%)</th><th>Gerekçe</th></tr>' +
     [...d.strategies].reverse().map((v) => { const s = stats(tr.filter((t) => t.version === v.version)); return `<tr title="${v.rules.replace(/"/g, '&quot;')}"><td><b>${v.version}</b></td><td>${tsi(v.at)}</td><td class="mono">${s.n}</td><td class="mono ${cls(s.net)}">${sg(s.net, 4)}</td><td class="mono">${s.pf === Infinity ? '∞' : f(s.pf, 3)}</td><td class="mono">${f(s.wsr, 1)}</td><td class="mono">${f(s.bsr, 1)}</td><td style="white-space:normal;max-width:520px">${(v.reason || '').replace(/</g, '&lt;')}</td></tr>`; }).join('');
