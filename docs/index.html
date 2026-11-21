@@ -20,7 +20,7 @@ header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;
 h1{margin:0;font-size:20px;font-weight:600}h2{font-size:13px;font-weight:500;color:var(--mut);margin:0 0 12px;text-transform:uppercase;letter-spacing:.06em}
 .sub{color:var(--mut);font-size:13px}.pill{display:inline-block;padding:2px 10px;border-radius:99px;background:var(--panel2);border:1px solid var(--line);font-size:12px;margin-left:8px}
 main{padding:24px 0 48px}
-.wrap{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:16px;max-width:1880px;margin:0 auto;padding:0 32px}
+.wrap{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;max-width:1880px;margin:0 auto;padding:0 32px}
 aside{position:sticky;top:38px;height:calc(100vh - 38px);padding:16px 0;display:flex;flex-direction:column}
 aside .card{flex:1;display:flex;flex-direction:column;overflow:hidden}
 .feed{flex:1;overflow:hidden;position:relative;-webkit-mask-image:linear-gradient(#000 85%,transparent)}
@@ -60,10 +60,7 @@ td{padding:8px 10px;border-bottom:1px solid #1a2130;white-space:nowrap}tr:hover 
 .topbar{display:none}.scrim{position:fixed;inset:0;background:#000a;z-index:45}.scrim[hidden]{display:none}
 .burger{width:38px;height:38px;flex:none;border:1px solid var(--line);border-radius:8px;background:var(--panel2);display:grid;place-content:center;gap:4px;cursor:pointer;padding:0}.burger span{display:block;width:16px;height:2px;border-radius:1px;background:var(--tx)}
 [data-view][hidden]{display:none!important}
-body[data-view="karar"] .wrap{grid-template-columns:minmax(0,1fr)}body[data-view="karar"] .left{display:none}
-body[data-view="karar"] aside{position:static;height:auto;padding:24px 0 48px}body[data-view="karar"] .feed{-webkit-mask-image:none;overflow:visible}body[data-view="karar"] .feed .inner{animation:none!important}
-body[data-view="karar"] .dec{max-width:900px}
-@media(max-width:1100px){body:not([data-view="karar"]) aside{display:none}}
+#karar .feed{height:260px}
 @media(max-width:900px){
   .rail{width:min(86vw,280px);transform:translateX(-102%);transition:transform .22s ease-out;z-index:50;box-shadow:0 0 40px #000c}.rail.open{transform:none}
   .page{margin-left:0}.topbar{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line);position:sticky;top:38px;z-index:4;background:var(--bg)}.topbar strong{font-size:15px}
@@ -102,7 +99,7 @@ body[data-view="karar"] .dec{max-width:900px}
 </div>
 <nav class="rail" id="rail" aria-label="Bölümler">
   <div class="brand"><div class="name"><svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect width="26" height="26" rx="7" fill="#171d2a"/><line x1="8" x2="8" y1="6" y2="19" stroke="#ff5d6c" stroke-width="1.6"/><rect x="5.5" y="9" width="5" height="7" rx="1" fill="#ff5d6c"/><line x1="18" x2="18" y1="4" y2="20" stroke="#2fd18b" stroke-width="1.6"/><rect x="15.5" y="7" width="5" height="10" rx="1" fill="#2fd18b"/></svg>Claude Trader</div><div class="role">Binance USDT-M · intraday forward test</div></div>
-  <div class="nav"><a href="#ozet" data-go="ozet"><span class="bar"></span>Özet</a><a href="#grafik" data-go="grafik"><span class="bar"></span>Grafikler</a><a href="#acik" data-go="acik"><span class="bar"></span>Açık pozisyonlar</a><a href="#yon" data-go="yon"><span class="bar"></span>Yön bazında performans</a><a href="#coin" data-go="coin"><span class="bar"></span>Coin performansı</a><a href="#gecmis" data-go="gecmis"><span class="bar"></span>İşlem geçmişi</a><a href="#karar" data-go="karar"><span class="bar"></span>Karar günlüğü</a><a href="#strateji" data-go="strateji"><span class="bar"></span>Strateji sürümleri</a></div>
+  <div class="nav"><a href="#ozet" data-go="ozet"><span class="bar"></span>Özet</a><a href="#grafik" data-go="grafik"><span class="bar"></span>Grafikler</a><a href="#acik" data-go="acik"><span class="bar"></span>Açık pozisyonlar</a><a href="#yon" data-go="yon"><span class="bar"></span>Yön bazında performans</a><a href="#coin" data-go="coin"><span class="bar"></span>Coin performansı</a><a href="#gecmis" data-go="gecmis"><span class="bar"></span>İşlem geçmişi</a><a href="#strateji" data-go="strateji"><span class="bar"></span>Strateji sürümleri</a></div>
   <div class="rail-foot">
     <div class="links"><a href="https://alibingul-dev.github.io" target="_blank" rel="noopener">alibingul-dev.github.io</a><a href="https://www.linkedin.com/in/ali-bing%C3%BCl-b0666a30" target="_blank" rel="noopener">LinkedIn</a></div>
     <span class="lang"><button data-l="tr">TR</button><button data-l="en">EN</button></span>
@@ -131,6 +128,8 @@ body[data-view="karar"] .dec{max-width:900px}
     <div class="card"><div class="lbl">Equity</div><div class="big" id="kEq">—</div><div class="sub" id="kEqSub"></div></div>
     <div class="card"><div class="lbl">Profit factor</div><div class="big" id="kPf">—</div><div class="bar"><i id="kWsrBar" style="width:0"></i></div><div class="sub" id="kPfSub"></div></div>
   </section>
+
+  <section class="card" id="karar" data-view="ozet"><h2>Karar günlüğü</h2><div class="feed" id="feed"><div class="inner" id="dec"></div></div></section>
 
   <section class="kpis" id="kpis" data-view="ozet"></section>
 
@@ -162,7 +161,6 @@ body[data-view="karar"] .dec{max-width:900px}
   <section class="card" id="sec-strateji" data-view="strateji"><h2>Strateji sürümleri</h2><div class="scroll"><table id="tVer"></table></div></section>
 </main>
 </div>
-<aside id="karar"><div class="card"><h2>Karar günlüğü</h2><div class="feed" id="feed"><div class="inner" id="dec"></div></div></div></aside>
 </div>
 </div>
 <script>
@@ -315,7 +313,7 @@ function render(d) {
   const decHtml = [...d.decisions].reverse().map((x) => `<div class="dec"><div class="t">${tsi(x.ts)} TSİ · strateji ${x.version}</div>${decBody(x)}${x.actions?.length ? `<div class="a mono raw">${x.actions.map(esc).join(' · ')}</div>` : ''}</div>`).join('') || '<div class="sub">Henüz karar yok</div>';
   const feed = $('feed'), inner = $('dec');
   feed.classList.remove('run'); inner.innerHTML = decHtml;
-  if (document.body.dataset.view !== 'karar' && inner.scrollHeight > feed.clientHeight + 10) { inner.innerHTML = decHtml + decHtml; feed.style.setProperty('--dur', `${Math.max(30, d.decisions.length * 6)}s`); feed.classList.add('run'); }
+  if (inner.scrollHeight > feed.clientHeight + 10) { inner.innerHTML = decHtml + decHtml; feed.style.setProperty('--dur', `${Math.max(30, d.decisions.length * 6)}s`); feed.classList.add('run'); }
 
   const it = [];
   for (const m of d.market?.market || []) it.push(`<span class="ti"><b>${m.s.replace('USDT', '')}</b>${fp(m.px)} USDT <span class="${cls(m.ch24)}">${sg(m.ch24, 2)} % (24s)</span> <span class="${cls(m.ch1h)}">${sg(m.ch1h, 2)} % (1s)</span></span>`);
