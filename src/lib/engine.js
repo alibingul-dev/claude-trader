@@ -387,8 +387,20 @@ async function logDecision({ summary, actions = [] }) {
     ts: now, version: s.version, summary: String(summary || '').slice(0, 2000),
     actions: Array.isArray(actions) ? actions.slice(0, 20).map(String) : [String(actions)],
   });
+  // End-of-day recap for the previous Istanbul day, folded into this run's single post (first run after midnight).
+  let eod = null;
+  try {
+    const dk = (ms) => new Date(ms).toLocaleDateString('sv-SE', { timeZone: 'Europe/Istanbul' });
+    const yday = dk(now - 864e5);
+    if (!s.lastEodDay) { s.lastEodDay = yday; await db.put('state', 'main', s); }
+    else if (s.lastEodDay < yday) {
+      const tr = (await db.list('trade')).filter((t) => dk(t.closedAt) === yday);
+      eod = square.eodLines(yday, tr, s.wallet, (await db.list('pos')).length, s.startWallet);
+      s.lastEodDay = yday; await db.put('state', 'main', s);
+    }
+  } catch (e) { eod = null; }
   let digest; // one Square + Agent Resume post for all opens/closes of this run
-  try { digest = await square.flushDigest(s.wallet); } catch (e) { digest = { error: e.message }; }
+  try { digest = await square.flushDigest(s.wallet, eod); } catch (e) { digest = { error: e.message }; }
   return { logged: true, ts_utc: new Date(now).toISOString(), digest };
 }
 
