@@ -227,10 +227,7 @@ async function hourClose() {
   await db.put('equity', pad(now), { ts: now, wallet: s.wallet, equity, open: open.length });
   const market = await snapshot();
   await db.put('market', 'last', { ts: now, market });
-  let square_catchup = null; // events of the last 2 h whose Square post has not gone through yet (e.g. key added later)
-  try { square_catchup = await square.postRecent(2); } catch (e) { square_catchup = { error: e.message }; }
   return {
-    square_catchup,
     ts_utc: new Date(now).toISOString(),
     version: s.version,
     wallet_usdt: rd(s.wallet), equity_usdt: rd(equity),
@@ -390,7 +387,9 @@ async function logDecision({ summary, actions = [] }) {
     ts: now, version: s.version, summary: String(summary || '').slice(0, 2000),
     actions: Array.isArray(actions) ? actions.slice(0, 20).map(String) : [String(actions)],
   });
-  return { logged: true, ts_utc: new Date(now).toISOString() };
+  let digest; // one Square + Agent Resume post for all opens/closes of this run
+  try { digest = await square.flushDigest(s.wallet); } catch (e) { digest = { error: e.message }; }
+  return { logged: true, ts_utc: new Date(now).toISOString(), digest };
 }
 
 async function setStrategy({ version, rules, reason = '' }) {
