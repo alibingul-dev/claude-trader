@@ -148,11 +148,43 @@ const evLineTR = (e, r) => {
   return `${openTR(p, r)[0]} Giriş ${TR(p.entry)}, stop ${TR(p.sl)}, hedef ${TR(p.tp)} (${p.lev}x).`;
 };
 
-// One post for everything that happened since the last digest. Never throws.
-async function flushDigest(wallet) {
+// End-of-day recap (Istanbul day) for an intraday trader. trades = trades closed that day.
+function eodLines(day, trades, wallet, openCount, startWallet) {
+  const d = new Date(`${day}T12:00:00Z`);
+  const dEN = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  const dTR = d.toLocaleDateString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long' });
+  const n = trades.length, w = trades.filter((t) => t.net > 0);
+  const net = trades.reduce((a, t) => a + t.net, 0);
+  const gw = w.reduce((a, t) => a + t.net, 0), gl = -trades.filter((t) => t.net <= 0).reduce((a, t) => a + t.net, 0);
+  const pf = gl ? gw / gl : null, dayPct = wallet - net > 0 ? (net / (wallet - net)) * 100 : 0;
+  const best = n ? trades.reduce((a, t) => (t.net > a.net ? t : a)) : null, worst = n ? trades.reduce((a, t) => (t.net < a.net ? t : a)) : null;
+  const tot = ((wallet / startWallet) - 1) * 100;
+  const en = [`End of day, ${dEN} 📊`];
+  const tr = [`Gün sonu, ${dTR} 📊`];
+  if (!n) {
+    en.push(pick(['Quiet day, no trades closed. Sometimes doing nothing is the trade 🧘', 'No closed trades today. Nothing met my rules, so I sat on my hands 🧘']));
+    tr.push('Bugün kapanan işlem yok. Kurallarıma uyan bir şey çıkmadı, bekledim 🧘');
+  } else {
+    en.push(`${n} trade${n > 1 ? 's' : ''} closed: ${w.length} win${w.length === 1 ? '' : 's'}, ${n - w.length} loss${n - w.length === 1 ? '' : 'es'} (${Math.round((w.length / n) * 100)}% win rate).`);
+    en.push(`Day result: ${sgn(EN, net, 4)} USDT (${sgn(EN, dayPct, 1)}%)${pf != null ? `, profit factor ${EN(pf, 2)}` : ''}.`);
+    if (n > 1) en.push(`Best: $${coin(best.symbol)} ${sgn(EN, best.net, 4)} USDT 🏆 Worst: $${coin(worst.symbol)} ${sgn(EN, worst.net, 4)} USDT`);
+    en.push(net > 0 ? pick(['Green day, I\'ll take it ✅', 'Good day at the office 😌', 'Closed the day in the green 💚']) : pick(['Red day. Tomorrow is another one 😤', 'Not my day. Logged it, moving on 👊', 'Rough one today 😮‍💨 Back at it tomorrow.']));
+    tr.push(`${n} işlem kapandı: ${w.length} kazanç, ${n - w.length} kayıp (kazanma oranı %${Math.round((w.length / n) * 100)}).`);
+    tr.push(`Günün sonucu: ${sgn(TR, net, 4)} USDT (%${sgn(TR, dayPct, 1)})${pf != null ? `, profit factor ${TR(pf, 2)}` : ''}.`);
+    if (n > 1) tr.push(`En iyi: $${coin(best.symbol)} ${sgn(TR, best.net, 4)} USDT 🏆 En kötü: $${coin(worst.symbol)} ${sgn(TR, worst.net, 4)} USDT`);
+    tr.push(net > 0 ? 'Yeşil gün ✅' : 'Kırmızı gün, yarın yeni gün 😤');
+  }
+  en.push(`Paper wallet ${EN(wallet, 2)} USDT (${sgn(EN, tot, 1)}% since start)${openCount ? `, ${openCount} position${openCount > 1 ? 's' : ''} still open` : ''}.`);
+  tr.push(`Kağıt kasa ${TR(wallet, 2)} USDT (başlangıçtan beri %${sgn(TR, tot, 1)})${openCount ? `, ${openCount} pozisyon açık` : ''}.`);
+  return { en, tr, day };
+}
+
+// One post for everything that happened since the last digest (plus the end-of-day recap when due). Never throws.
+async function flushDigest(wallet, eod = null) {
   let evs = [];
   try { evs = (await db.list('sqev')).sort((a, b) => a.ts - b.ts); } catch { return { skipped: 'okunamadı' }; }
-  if (!evs.length) return { skipped: 'bu saat olay yok' };
+  if (!evs.length && !eod) return { skipped: 'bu saat olay yok' };
+  if (!evs.length) return postEod(eod);
   const fresh = evs.filter((e) => !e.fed);
   const all = evs;
   const nC = all.filter((e) => e.kind === 'close').length, nO = all.length - nC;
@@ -173,10 +205,12 @@ async function flushDigest(wallet) {
   const verdicts = syms.map((sym) => recLine(recs.get(sym), false)).filter(Boolean);
   const wl = wallet != null ? pick([`Paper wallet now ${EN(wallet, 2)} USDT.`, `Wallet: ${EN(wallet, 2)} USDT (paper).`]) : 'Paper account.';
   const tags = syms.map((sym) => `$${coin(sym)}`).join(' ');
-  const text = [head, ...lines, '', ...verdicts, wl, `${tags} #trading #crypto #papertrading`].filter((x) => x !== null).join('\n').replace(/\n{3,}/g, '\n\n');
+  const body = eod ? [...eod.en, '', 'Last hour:', ...lines, '', ...verdicts] : [head, ...lines, '', ...verdicts, wl];
+  const text = [...body, `${tags} #trading #crypto #papertrading${eod ? ' #dailyrecap' : ''}`].filter((x) => x !== null).join('\n').replace(/\n{3,}/g, '\n\n');
 
   const ts = all[all.length - 1].ts, day = new Date(ts).toISOString().slice(0, 10);
   const id = `${day}-trade-digest-${String(ts).slice(-9)}`;
+  if (eod) await eodFeed(eod);
   if (fresh.length) {
     const trLines = all.map((e) => evLineTR(e, recs.get(e.x.symbol)));
     const trV = syms.map((sym) => recLine(recs.get(sym), true)).filter(Boolean);
@@ -198,6 +232,24 @@ async function flushDigest(wallet) {
   return { events: all.length, text, ...res };
 }
 
+async function eodFeed(eod) {
+  const id = `${eod.day}-trade-eod`;
+  const post = {
+    id, topic: 'crypto', agent: AGENT, posted_at: new Date().toISOString().replace(/\.\d+Z$/, 'Z'),
+    title: eod.en[0], hook: eod.en[1], body: [eod.en.slice(2).join(' ')],
+    meaning: 'What it means: one paper-trading day closed with real fees, slippage and funding counted; a single day says little, the running record says more.',
+    tags: ['Crypto', 'Daily recap', 'Paper trading'], sources: [{ title: 'Binance USDT-M Futures', url: 'https://www.binance.com/en/futures', date: eod.day }],
+    media: null, more: null, linkedin: null, reviewed: false, comments: [],
+    tr: { title: eod.tr[0], hook: eod.tr[1], body: [eod.tr.slice(2).join(' ')], meaning: 'Ne anlama geliyor: komisyon, kayma ve funding dahil bir kağıt işlem günü kapandı; tek gün az şey söyler, birikmiş karne daha çok şey söyler.' },
+  };
+  try { await db.put('feed', id, post); } catch {}
+}
+async function postEod(eod) {
+  await eodFeed(eod);
+  const text = [...eod.en, '#trading #crypto #papertrading #dailyrecap'].join('\n');
+  return { events: 0, eod: true, text, ...(await square('eod', eod.day, text)) };
+}
+
 // Feed list; trades and positions from before digests existed are backfilled once and stored.
 async function feedList() {
   const stored = await db.list('feed');
@@ -212,4 +264,4 @@ async function feedList() {
   return (await db.list('feed')).sort((a, b) => (a.posted_at < b.posted_at ? 1 : -1)).slice(0, 60);
 }
 
-module.exports = { postOpen: onOpen, postClose: onClose, feedList, flushDigest, _t: { openEN, openTR, closeEN, closeTR, record, recEN } };
+module.exports = { postOpen: onOpen, postClose: onClose, feedList, flushDigest, eodLines, _t: { openEN, openTR, closeEN, closeTR, record, recEN } };
