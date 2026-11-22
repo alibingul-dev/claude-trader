@@ -152,4 +152,22 @@ async function feedList() {
   return (await db.list('feed')).sort((a, b) => (a.posted_at < b.posted_at ? 1 : -1)).slice(0, 60);
 }
 
-module.exports = { postOpen: onOpen, postClose: onClose, feedList, _t: { openEN, openTR, closeEN, closeTR, record, recEN } };
+// Manual catch-up: post open/close events of the last `sinceH` hours that have no successful Square post yet.
+async function postRecent(sinceH = 1.5) {
+  const from = Date.now() - sinceH * 3.6e6;
+  const [log, trades, open] = await Promise.all([db.list('square').catch(() => []), db.list('trade'), db.list('pos')]);
+  const done = new Set(log.filter((x) => x.ok).map((x) => `${x.pos}_${x.kind}`));
+  const out = [];
+  const ev = [
+    ...trades.filter((t) => t.openedAt >= from).map((t) => ({ ts: t.openedAt, kind: 'open', id: t.id, run: () => onOpen({ ...t, sl_pct: pct(t.entry, t.sl), tp_pct: pct(t.entry, t.tp) }) })),
+    ...open.filter((p) => p.openedAt >= from).map((p) => ({ ts: p.openedAt, kind: 'open', id: p.id, run: () => onOpen({ ...p, sl_pct: pct(p.entry, p.sl), tp_pct: pct(p.entry, p.tp) }) })),
+    ...trades.filter((t) => t.closedAt >= from).map((t) => ({ ts: t.closedAt, kind: 'close', id: t.id, run: () => onClose(t) })),
+  ].sort((a, b) => a.ts - b.ts);
+  for (const e of ev) {
+    if (done.has(`${e.id}_${e.kind}`)) { out.push({ id: e.id, kind: e.kind, skipped: 'already posted' }); continue; }
+    out.push({ id: e.id, kind: e.kind, ...(await e.run()) });
+  }
+  return { since_h: sinceH, events: out.length, results: out };
+}
+
+module.exports = { postOpen: onOpen, postClose: onClose, feedList, postRecent, _t: { openEN, openTR, closeEN, closeTR, record, recEN } };

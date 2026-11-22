@@ -47,6 +47,12 @@ const TOOLS = [
     run: (a) => eng.skipPosition(a),
   },
   {
+    name: 'square_post',
+    description: 'Son since_h saatteki pozisyon açılış/kapanış olaylarından Square\'e henüz başarıyla gitmemiş olanları post eder (manuel yakalama). Sonuç: her olay için ok, code, url.',
+    inputSchema: { type: 'object', properties: { since_h: { type: 'number', description: 'Kaç saat geriye bakılsın (varsayılan 1,5)' } } },
+    run: (a) => require('../lib/square').postRecent(a.since_h ?? 1.5),
+  },
+  {
     name: 'close_position',
     description: 'Açık pozisyonu mark fiyattan kapatır (önce aradaki 1m mumlarda stop/TP olmuş mu kontrol eder).',
     inputSchema: {
