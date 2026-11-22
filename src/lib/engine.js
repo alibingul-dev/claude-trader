@@ -210,35 +210,53 @@ async function snapshot() {
 
 
 // ---------- strategy lab ----------
-// Coded entry rules of every strategy run so far plus lab candidates. Every hour each rule is evaluated on the
-// snapshot; matches become shadow positions (never touch the wallet) tagged with every strategy that supports them.
-const clampSl = (atr, k, lo, hi) => rd(Math.min(hi, Math.max(lo, atr * k)), 2);
-const EXITS = {
-  STD: (m) => { const sl = clampSl(m.atr1h, 1, 0.8, 2.5); return { sl_pct: sl, tp_pct: rd(sl * 3, 2), max_hold_h: 12 }; },
-  WIDE: (m) => { const sl = clampSl(m.atr1h, 1.5, 1.2, 4); return { sl_pct: sl, tp_pct: rd(sl * 2, 2), max_hold_h: 12 }; },
-};
-const momSide = (m, b) =>
-  m.ch24 > 0 && m.ch4h > 0 && m.ch1h > 0 && m.rng >= 0.7 && m.vr >= 1.3 && m.fund <= 0.05 && b.ch1h > -0.5 ? 'LONG'
-    : m.ch24 < 0 && m.ch4h < 0 && m.ch1h < 0 && m.rng <= 0.3 && m.vr >= 1.3 && m.fund >= -0.05 && b.ch1h < 0.5 ? 'SHORT' : null;
-const LAB = [
-  { id: 'v1', family: 'v1', exit: 'STD', cooldownH: 0, side: momSide,
+// Every strategy is data: long/short condition lists over the hourly snapshot + an exit spec. Built-ins cover the
+// versions run so far; the hourly run adds/retires candidates itself (add_lab_strategy / retire_lab_strategy).
+// Each hour every rule is evaluated; matches become shadow positions (never touch the wallet) tagged with every
+// strategy that supports them.
+const FIELDS = ['px', 'ch24', 'ch4h', 'ch1h', 'atr1h', 'vr', 'rng', 'fund', 'qvM'];
+const OPS = { '>': (a, b) => a > b, '>=': (a, b) => a >= b, '<': (a, b) => a < b, '<=': (a, b) => a <= b, '==': (a, b) => a === b, '!=': (a, b) => a !== b };
+const MOM_L = [['ch24', '>', 0], ['ch4h', '>', 0], ['ch1h', '>', 0], ['rng', '>=', 0.7], ['vr', '>=', 1.3], ['fund', '<=', 0.05], ['btc.ch1h', '>', -0.5]];
+const MOM_S = [['ch24', '<', 0], ['ch4h', '<', 0], ['ch1h', '<', 0], ['rng', '<=', 0.3], ['vr', '>=', 1.3], ['fund', '>=', -0.05], ['btc.ch1h', '<', 0.5]];
+const EX_STD = { sl_atr_k: 1, sl_min: 0.8, sl_max: 2.5, tp_mult: 3, max_hold_h: 12 };
+const EX_WIDE = { sl_atr_k: 1.5, sl_min: 1.2, sl_max: 4, tp_mult: 2, max_hold_h: 12 };
+const BUILTIN = [
+  { id: 'v1', family: 'v1', long: MOM_L, short: MOM_S, exit: EX_STD, cooldownH: 0,
     desc: 'Momentum devamı + BTC rejimi; SL = ATR1h ×1 (0,8–2,5 %), TP = 3×SL, 12 saat' },
-  { id: 'v2', family: 'v2', exit: 'STD', cooldownH: 12, side: momSide,
+  { id: 'v2', family: 'v2', long: MOM_L, short: MOM_S, exit: EX_STD, cooldownH: 12,
     desc: 'v1 + aynı coine 12 saat tekrar giriş yok' },
-  { id: 'L-wide', family: null, exit: 'WIDE', cooldownH: 12, side: momSide,
+  { id: 'L-wide', long: MOM_L, short: MOM_S, exit: EX_WIDE, cooldownH: 12,
     desc: 'v2 girişleri, geniş stop: SL = ATR1h ×1,5 (1,2–4 %), TP = 2×SL' },
-  { id: 'L-btc', family: null, exit: 'STD', cooldownH: 12,
-    side: (m, b) => { const x = momSide(m, b); return (x === 'LONG' && b.ch1h > 0) || (x === 'SHORT' && b.ch1h < 0) ? x : null; },
+  { id: 'L-btc', long: [...MOM_L, ['btc.ch1h', '>', 0]], short: [...MOM_S, ['btc.ch1h', '<', 0]], exit: EX_STD, cooldownH: 12,
     desc: 'v2 girişleri + BTC aynı yönde (LONG: BTC 1s > 0 %, SHORT: BTC 1s < 0 %)' },
 ];
-const labStatus = (L, ver) => (L.family ? (String(ver).startsWith(L.family) ? 'aktif' : 'vazgeçildi') : 'aday');
+const MAX_CANDIDATES = 6; // active non-version candidates at once (multiple-testing guard)
+const exitKey = (e) => `${e.sl_atr_k}|${e.sl_min}|${e.sl_max}|${e.tp_mult}|${e.max_hold_h}`;
+const LEGACY_EXIT = { STD: exitKey(EX_STD), WIDE: exitKey(EX_WIDE) };
+const posExitKey = (p) => p.exitKey || LEGACY_EXIT[p.exitKind || 'STD'];
+const exitArgs = (e, m) => {
+  const sl = rd(Math.min(e.sl_max, Math.max(e.sl_min, m.atr1h * e.sl_atr_k)), 2);
+  return { sl_pct: sl, tp_pct: rd(sl * e.tp_mult, 2), max_hold_h: e.max_hold_h };
+};
+
+async function labList() {
+  const dyn = await db.list('labstrat');
+  return [...BUILTIN.map((L) => ({ ...L, builtin: true })), ...dyn];
+}
+const labStatus = (L, ver) =>
+  L.family ? (String(ver).startsWith(L.family) ? 'aktif' : 'vazgeçildi') : L.retired ? 'emekli' : 'aday';
+const scanning = (L) => !L.retired;
+
+const val = (f, m, b) => (f.startsWith('btc.') ? b[f.slice(4)] : m[f]);
+const condsOk = (cs, m, b) => cs.every(([f, op, v]) => { const x = val(f, m, b); return x != null && OPS[op](x, v); });
+const sideOf = (L, m, b) => (condsOk(L.long || [['ch24', '>', 1e9]], m, b) ? 'LONG' : condsOk(L.short || [['ch24', '<', -1e9]], m, b) ? 'SHORT' : null);
 
 // Strategies (by id) whose rule fires for this symbol/side on this snapshot, respecting each one's cooldown.
-function labSupports(market, sym, side, recent, now) {
+function labSupports(LAB, market, sym, side, recent, now) {
   const b = market.find((x) => x.s === 'BTCUSDT');
   const m = market.find((x) => x.s === sym);
   if (!b || !m || sym === 'BTCUSDT') return [];
-  return LAB.filter((L) => L.side(m, b) === side &&
+  return LAB.filter((L) => scanning(L) && sideOf(L, m, b) === side &&
     !(L.cooldownH && recent.some((t) => t.symbol === sym && t.closedAt > now - L.cooldownH * 3.6e6 &&
       (!t.supports || t.supports.includes(L.id)))))
     .map((L) => L.id);
@@ -247,15 +265,15 @@ function labSupports(market, sym, side, recent, now) {
 async function labScan(market, s, now) {
   const b = market.find((x) => x.s === 'BTCUSDT');
   if (!b) return [];
-  const [spos, strades, trades, open] = await Promise.all([db.list('spos'), db.list('strade'), db.list('trade'), db.list('pos')]);
+  const [LAB, spos, strades, trades, open] = await Promise.all([labList(), db.list('spos'), db.list('strade'), db.list('trade'), db.list('pos')]);
   const recent = [...strades.slice(-500), ...trades.slice(-200)];
-  const groups = new Map(); // sym|side|exit -> { m, side, exit, ids }
+  const groups = new Map(); // sym|side|exitKey -> { m, side, exit, ids }
   for (const m of market) {
     if (m.s === 'BTCUSDT') continue;
     for (const side of ['LONG', 'SHORT']) {
-      for (const id of labSupports(market, m.s, side, recent, now)) {
+      for (const id of labSupports(LAB, market, m.s, side, recent, now)) {
         const L = LAB.find((x) => x.id === id);
-        const k = `${m.s}|${side}|${L.exit}`;
+        const k = `${m.s}|${side}|${exitKey(L.exit)}`;
         if (!groups.has(k)) groups.set(k, { m, side, exit: L.exit, ids: [] });
         groups.get(k).ids.push(id);
       }
@@ -263,30 +281,76 @@ async function labScan(market, s, now) {
   }
   const made = [];
   for (const g of groups.values()) {
-    const ex = spos.find((p) => p.symbol === g.m.s && p.side === g.side && (p.exitKind || 'STD') === g.exit);
+    const ek = exitKey(g.exit);
+    const ex = spos.find((p) => p.symbol === g.m.s && p.side === g.side && posExitKey(p) === ek);
     if (ex) { // already tracked: just record the extra supporters
       const add = g.ids.filter((i) => !(ex.supports || []).includes(i));
       if (add.length) { ex.supports = [...(ex.supports || []), ...add]; await db.put('spos', ex.id, ex); }
       continue;
     }
     try {
-      const { pos } = await buildPos({ symbol: g.m.s, side: g.side, ...EXITS[g.exit](g.m), reason: `LAB: ${g.ids.join(', ')} kuralı tuttu` }, s, open);
+      const { pos } = await buildPos({ symbol: g.m.s, side: g.side, ...exitArgs(g.exit, g.m), reason: `LAB: ${g.ids.join(', ')} kuralı tuttu` }, s, open);
       s.sseq = (s.sseq || 0) + 1;
       pos.id = `S${s.sseq}`;
-      Object.assign(pos, { skipped: true, lab: true, exitKind: g.exit, supports: g.ids });
+      Object.assign(pos, { skipped: true, lab: true, exitKey: ek, supports: g.ids });
       await db.put('spos', pos.id, pos);
-      made.push({ id: pos.id, sym: pos.symbol, side: pos.side, exit: g.exit, supports: g.ids });
+      made.push({ id: pos.id, sym: pos.symbol, side: pos.side, sl_pct: pos.sl_pct, tp_pct: pos.tp_pct, supports: g.ids });
     } catch (e) { made.push({ sym: g.m.s, side: g.side, error: e.message.slice(0, 120) }); }
   }
   await db.put('state', 'main', s);
   return made;
 }
 
-function labStats(strades, ver, now) {
+function labStats(LAB, strades, ver, now) {
   return Object.fromEntries(LAB.map((L) => {
     const ts = strades.filter((t) => (t.supports || []).includes(L.id));
-    return [L.id, { status: labStatus(L, ver), rule: L.desc, all: stats(ts), last24h: stats(ts.filter((t) => t.closedAt > now - 864e5)) }];
+    return [L.id, {
+      status: labStatus(L, ver), rule: L.desc, long: L.long, short: L.short, exit: L.exit, cooldown_h: L.cooldownH,
+      ...(L.addedAt ? { added_utc: new Date(L.addedAt).toISOString() } : {}),
+      ...(L.retired ? { retired_reason: L.retiredReason } : {}),
+      all: stats(ts), last24h: stats(ts.filter((t) => t.closedAt > now - 864e5)),
+    }];
   }));
+}
+
+function checkConds(cs, name) {
+  if (!Array.isArray(cs) || !cs.length || cs.length > 12) throw new Error(`${name}: 1–12 koşul listesi olmalı`);
+  for (const c of cs) {
+    if (!Array.isArray(c) || c.length !== 3) throw new Error(`${name}: her koşul [alan, op, değer]`);
+    const [f, op, v] = c;
+    const base = String(f).replace(/^btc\./, '');
+    if (!FIELDS.includes(base)) throw new Error(`${name}: alan ${f} yok; izinli: ${FIELDS.join(', ')} (BTC için btc. öneki)`);
+    if (!OPS[op]) throw new Error(`${name}: op ${op} yok; izinli: ${Object.keys(OPS).join(' ')}`);
+    if (typeof v !== 'number' || !isFinite(v)) throw new Error(`${name}: değer sayı olmalı`);
+  }
+}
+
+async function addLabStrategy({ id, desc, long, short, exit, cooldown_h = 12, hypothesis = '' }) {
+  id = String(id || '');
+  if (!/^L-[a-z0-9-]{2,24}$/.test(id)) throw new Error('id biçimi L-xxx (küçük harf, rakam, tire; 2–24)');
+  const LAB = await labList();
+  if (LAB.some((L) => L.id === id)) throw new Error(`${id} zaten var`);
+  if (!long && !short) throw new Error('long veya short koşul listesinden en az biri gerekli');
+  if (long) checkConds(long, 'long');
+  if (short) checkConds(short, 'short');
+  const e = exit || {};
+  const ex = { sl_atr_k: +e.sl_atr_k, sl_min: +e.sl_min, sl_max: +e.sl_max, tp_mult: +e.tp_mult, max_hold_h: +e.max_hold_h };
+  if (!(ex.sl_atr_k > 0 && ex.sl_min >= 0.3 && ex.sl_max <= 10 && ex.sl_min <= ex.sl_max && ex.tp_mult > 0 && ex.max_hold_h > 0 && ex.max_hold_h <= 72))
+    throw new Error('exit: sl_atr_k > 0, 0,3 ≤ sl_min ≤ sl_max ≤ 10, tp_mult > 0, 0 < max_hold_h ≤ 72');
+  const activeCands = LAB.filter((L) => !L.family && !L.retired).length;
+  if (activeCands >= MAX_CANDIDATES) throw new Error(`En fazla ${MAX_CANDIDATES} aktif aday; önce retire_lab_strategy ile birini emekli et`);
+  const L = { id, desc: String(desc || '').slice(0, 300), hypothesis: String(hypothesis).slice(0, 1000),
+    long: long || null, short: short || null, exit: ex, cooldownH: Math.max(0, +cooldown_h || 0), addedAt: Date.now() };
+  await db.put('labstrat', id, L);
+  return { added: id, active_candidates: activeCands + 1, max: MAX_CANDIDATES };
+}
+
+async function retireLabStrategy({ id, reason = '' }) {
+  const L = await db.getOne('labstrat', String(id));
+  if (!L) throw new Error(`${id} eklenmiş bir aday değil (yerleşik stratejiler emekli edilemez)`);
+  Object.assign(L, { retired: true, retiredAt: Date.now(), retiredReason: String(reason).slice(0, 500) });
+  await db.put('labstrat', L.id, L);
+  return { retired: L.id };
 }
 
 // ---------- tools ----------
@@ -417,7 +481,7 @@ async function skipPosition({ symbol, side, sl_pct, tp_pct, max_hold_h = 24, rea
   try {
     const mk = await db.getOne('market', 'last');
     const recent = [...(await db.list('strade')).slice(-500), ...(await db.list('trade')).slice(-200)];
-    pos.supports = mk ? labSupports(mk.market, symbol, side, recent, Date.now()) : [];
+    pos.supports = mk ? labSupports(await labList(), mk.market, symbol, side, recent, Date.now()) : [];
   } catch (e) { pos.supports = []; }
   await db.put('spos', pos.id, pos);
   await db.put('state', 'main', s);
@@ -474,7 +538,7 @@ async function performance({ version } = {}) {
     filter: version || 'all', ...stats(trades),
     by_version: Object.fromEntries(Object.entries(byVersion).map(([v, ts]) => [v, stats(ts)])),
     last10: trades.slice(-10).map(compactTrade),
-    lab: labStats(await db.list('strade'), s.version, Date.now()),
+    lab: labStats(await labList(), await db.list('strade'), s.version, Date.now()),
   };
 }
 
@@ -536,11 +600,12 @@ async function dashboardData() {
     state, open: pos.map(compactPos), trades, equity: equity.slice(-3000),
     decisions: decisions.slice(-300), strategies, market,
     skipped_open: spos.map(compactPos), skipped: strades.slice(-1000),
-    lab: LAB.map((L) => ({ id: L.id, rule: L.desc, status: labStatus(L, state.version) })),
+    lab: (await labList()).map((L) => ({ id: L.id, rule: L.desc, status: labStatus(L, state.version) })),
   };
 }
 
 module.exports = {
   hourClose, openPosition, skipPosition, closePosition, performance, logDecision, setStrategy, getStrategy, dashboardData,
-  _test: { replay, leverageFor, notionalFor, CFG, labSupports, LAB },
+  addLabStrategy, retireLabStrategy,
+  _test: { replay, leverageFor, notionalFor, CFG, labSupports, BUILTIN, checkConds, exitArgs },
 };

@@ -82,6 +82,45 @@ const TOOLS = [
     run: (a) => eng.performance(a),
   },
   {
+    name: 'add_lab_strategy',
+    description:
+      'Laboratuvara yeni ADAY strateji ekler (kod gerekmez). hour_close bundan sonra her saat bu kuralı piyasa özetine uygular, tutan adayları kasaya dokunmadan gölgede izler; sonuç performance.lab[id] altında. Koşul: [alan, op, değer]; alanlar px, ch24, ch4h, ch1h (%), atr1h (%), vr, rng (0..1), fund (%/8h), qvM (M USDT); BTC için "btc." öneki (ör. btc.ch1h). op: > >= < <= == !=. Bir listedeki koşulların hepsi tutmalı (VE). En fazla 6 aktif aday; elenen 4 aile (spike fade/follow, Bollinger ortalamaya dönüş, funding fade, SMC) tekrar eklenmez.',
+    inputSchema: {
+      type: 'object',
+      required: ['id', 'desc', 'exit', 'hypothesis'],
+      properties: {
+        id: { type: 'string', description: 'L-xxx (küçük harf, rakam, tire)' },
+        desc: { type: 'string', description: 'Kuralın tek satır özeti' },
+        long: { type: 'array', items: { type: 'array' }, description: 'LONG koşulları, ör. [["ch1h",">",1],["vr",">=",2],["btc.ch1h",">",0]]' },
+        short: { type: 'array', items: { type: 'array' }, description: 'SHORT koşulları' },
+        exit: {
+          type: 'object',
+          required: ['sl_atr_k', 'sl_min', 'sl_max', 'tp_mult', 'max_hold_h'],
+          properties: {
+            sl_atr_k: { type: 'number', description: 'SL = atr1h × k' },
+            sl_min: { type: 'number', description: 'SL alt sınırı, % (≥ 0,3)' },
+            sl_max: { type: 'number', description: 'SL üst sınırı, % (≤ 10)' },
+            tp_mult: { type: 'number', description: 'TP = SL × bu çarpan' },
+            max_hold_h: { type: 'number', description: 'En uzun tutma, saat (≤ 72)' },
+          },
+        },
+        cooldown_h: { type: 'number', description: 'Aynı coine tekrar giriş beklemesi, saat (varsayılan 12)' },
+        hypothesis: { type: 'string', description: 'Neden kazanmalı; hangi teşhise (giriş yönü / çıkış / maliyet) cevap veriyor' },
+      },
+    },
+    run: (a) => eng.addLabStrategy(a),
+  },
+  {
+    name: 'retire_lab_strategy',
+    description: 'Eklenmiş bir adayı emekli eder: yeni tarama durur, geçmiş sonuçları performance.lab içinde kalır. Yerleşik sürümler (v1, v2, L-wide, L-btc) emekli edilemez.',
+    inputSchema: {
+      type: 'object',
+      required: ['id', 'reason'],
+      properties: { id: { type: 'string' }, reason: { type: 'string', description: 'n, PF, net ile gerekçe' } },
+    },
+    run: (a) => eng.retireLabStrategy(a),
+  },
+  {
     name: 'get_strategy',
     description: 'Geçerli strateji sürümünün kuralları ve sürüm geçmişi.',
     inputSchema: { type: 'object', properties: {} },
