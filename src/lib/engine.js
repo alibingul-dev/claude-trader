@@ -62,7 +62,7 @@ function compactPos(p) {
     notional_usdt: rd(p.notional, 2), margin_usdt: rd(p.margin, 4),
     upnl_usdt: rd(p.qty * (last - p.entry) * p.dir + p.funding - p.feeIn, 4),
     mfe_pct: rd(p.mfe, 2), mae_pct: rd(p.mae, 2),
-    age_h: rd((Date.now() - p.openedAt) / 3.6e6, 1), version: p.version,
+    age_h: rd((Date.now() - p.openedAt) / 3.6e6, 1), openedAt: p.openedAt, version: p.version,
   };
 }
 
