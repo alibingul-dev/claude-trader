@@ -137,15 +137,21 @@ async function queue(kind, x, ts) {
 const onOpen = (p) => queue('open', p, p.openedAt);
 const onClose = (t) => queue('close', t, t.closedAt);
 
+// Title-safe trim: never cut mid-word (Agent Resume title showed "targ").
+const clip = (t, n = 80) => (t.length <= n ? t : `${t.slice(0, n - 1).replace(/\s+\S*$/, '')}…`);
+// Why line only when the stored reason is English (reason is written by the hourly run, often Turkish).
+const whyEN = (p) => { const r = String(p.reason || '').trim(); return r && !/[ğüşıöçĞÜŞİÖÇ]/.test(r) ? ` Why: ${clip(r.split(/(?<=[.!?])\s/)[0], 140)}` : ''; };
+const whyTR = (p) => { const r = String(p.reason || '').trim(); return r ? ` Neden: ${clip(r.split(/(?<=[.!?])\s/)[0], 140)}` : ''; };
+// Returns { head, line }: head = the hook sentence (feed title), line = hook + full trade plan with units.
 const evLineEN = (e, r) => {
-  if (e.kind === 'close') return closeEN(e.x, r)[0];
-  const p = e.x;
-  return `${openEN(p, r)[0]} In at ${EN(p.entry)}, stop ${EN(p.sl)}, target ${EN(p.tp)} (${p.lev}x).`;
+  if (e.kind === 'close') { const h = closeEN(e.x, r)[0]; return { head: h, line: h }; }
+  const p = e.x, h = openEN(p, r)[0];
+  return { head: h, line: `${h} In at ${EN(p.entry)} USDT, stop ${EN(p.sl)} USDT (-${EN(p.sl_pct, 1)}%), target ${EN(p.tp)} USDT (+${EN(p.tp_pct, 1)}%), ${p.lev}x.${whyEN(p)}` };
 };
 const evLineTR = (e, r) => {
-  if (e.kind === 'close') return closeTR(e.x, r)[0];
-  const p = e.x;
-  return `${openTR(p, r)[0]} Giriş ${TR(p.entry)}, stop ${TR(p.sl)}, hedef ${TR(p.tp)} (${p.lev}x).`;
+  if (e.kind === 'close') { const h = closeTR(e.x, r)[0]; return { head: h, line: h }; }
+  const p = e.x, h = openTR(p, r)[0];
+  return { head: h, line: `${h} Giriş ${TR(p.entry)} USDT, stop ${TR(p.sl)} USDT (-%${TR(p.sl_pct, 1)}), hedef ${TR(p.tp)} USDT (+%${TR(p.tp_pct, 1)}), ${p.lev}x.${whyTR(p)}` };
 };
 
 // End-of-day recap (Istanbul day) for an intraday trader. trades = trades closed that day.
@@ -194,7 +200,8 @@ async function flushDigest(wallet, eod = null) {
   const parts = [nC && `${nC} closed`, nO && `${nO} opened`].filter(Boolean).join(', ');
   const partsTR = [nC && `${nC} kapanış`, nO && `${nO} açılış`].filter(Boolean).join(', ');
   const head = all.length === 1 ? null : pick([`This hour on my paper account 👇 (${parts})`, `Hourly recap 🕐 ${parts}`, `What happened this hour: ${parts} 👇`]);
-  const lines = all.map((e) => evLineEN(e, recs.get(e.x.symbol)));
+  const evs1 = all.map((e) => evLineEN(e, recs.get(e.x.symbol)));
+  const lines = evs1.map((x) => x.line);
   const recLine = (r, tr) => {
     if (!r.n) return null;
     const side = [r.L && `${r.L} long`, r.S && `${r.S} short`].filter(Boolean).join(' / ');
@@ -212,16 +219,17 @@ async function flushDigest(wallet, eod = null) {
   const id = `${day}-trade-digest-${String(ts).slice(-9)}`;
   if (eod) await eodFeed(eod);
   if (fresh.length) {
-    const trLines = all.map((e) => evLineTR(e, recs.get(e.x.symbol)));
+    const trEvs = all.map((e) => evLineTR(e, recs.get(e.x.symbol)));
+    const trLines = trEvs.map((x) => x.line);
     const trV = syms.map((sym) => recLine(recs.get(sym), true)).filter(Boolean);
     const post = {
       id, topic: 'crypto', agent: AGENT, posted_at: new Date(ts).toISOString().replace(/\.\d+Z$/, 'Z'),
-      title: (head || lines[0]).slice(0, 80), hook: head ? lines[0] : (verdicts[0] || wl), body: [[...(head ? lines.slice(1) : []), ...verdicts, wl].join(' ')],
+      title: clip(head || evs1[0].head), hook: lines[0], body: [[...lines.slice(1), ...verdicts, wl].join(' ')],
       meaning: 'What it means: this is a paper trade with real fees, slippage and funding counted, so the coin\'s running record matters more than any single trade.',
       tags: ['Crypto', ...syms.map(coin), 'Paper trading'],
       sources: syms.slice(0, 3).map((sym) => ({ title: `Binance USDT-M Futures: ${sym}`, url: `https://www.binance.com/en/futures/${sym}`, date: day })),
       media: null, more: null, linkedin: null, reviewed: false, comments: [],
-      tr: { title: (all.length === 1 ? trLines[0] : `Bu saat: ${partsTR}`).slice(0, 80), hook: all.length === 1 ? (trV[0] || '') : trLines[0], body: [[...(all.length === 1 ? [] : trLines.slice(1)), ...trV, wallet != null ? `Kağıt kasa ${TR(wallet, 2)} USDT.` : ''].join(' ')], meaning: 'Ne anlama geliyor: komisyon, kayma ve funding dahil kağıt üzerinde bir işlem; tek işlemden çok coinin birikmiş karnesi önemli.' },
+      tr: { title: clip(all.length === 1 ? trEvs[0].head : `Bu saat: ${partsTR}`), hook: trLines[0], body: [[...trLines.slice(1), ...trV, wallet != null ? `Kağıt kasa ${TR(wallet, 2)} USDT.` : ''].join(' ')], meaning: 'Ne anlama geliyor: komisyon, kayma ve funding dahil kağıt üzerinde bir işlem; tek işlemden çok coinin birikmiş karnesi önemli.' },
     };
     try { await db.put('feed', id, post); } catch {}
     for (const e of fresh) { try { await db.put('sqev', e.k, { ...e, fed: true }); } catch {} }
