@@ -127,47 +127,89 @@ async function feed(kind, x, en, tr, ts) {
   return id;
 }
 
-async function onOpen(p) {
-  const r = await record(p.symbol), en = openEN(p, r);
-  await feed('open', p, en, openTR(p, r), p.openedAt);
-  return square('open', p.id, [...en, `${r.tag} #trading #crypto #papertrading`].join('\n'));
+// Events are queued and posted ONCE per hourly run as a single digest (Square + Agent Resume), at log_decision.
+const DIGEST_SINCE = Date.parse('2026-11-22T11:20:00Z'); // per-trade feed entries before this, digests after
+async function queue(kind, x, ts) {
+  const k = `${String(ts).padStart(15, '0')}_${x.id}_${kind}`;
+  try { await db.put('sqev', k, { k, kind, ts, x }); } catch {}
+  return { ok: true, url: 'kuyrukta: saat sonunda toplu post' };
 }
-async function onClose(t) {
-  const r = await record(t.symbol), en = closeEN(t, r);
-  await feed('close', t, en, closeTR(t, r), t.closedAt);
-  return square('close', t.id, [...en, `${r.tag} #trading #crypto #papertrading`].join('\n'));
+const onOpen = (p) => queue('open', p, p.openedAt);
+const onClose = (t) => queue('close', t, t.closedAt);
+
+const evLineEN = (e, r) => {
+  if (e.kind === 'close') return closeEN(e.x, r)[0];
+  const p = e.x;
+  return `${openEN(p, r)[0]} In at ${EN(p.entry)}, stop ${EN(p.sl)}, target ${EN(p.tp)} (${p.lev}x).`;
+};
+const evLineTR = (e, r) => {
+  if (e.kind === 'close') return closeTR(e.x, r)[0];
+  const p = e.x;
+  return `${openTR(p, r)[0]} Giriş ${TR(p.entry)}, stop ${TR(p.sl)}, hedef ${TR(p.tp)} (${p.lev}x).`;
+};
+
+// One post for everything that happened since the last digest. Never throws.
+async function flushDigest(wallet) {
+  let evs = [];
+  try { evs = (await db.list('sqev')).sort((a, b) => a.ts - b.ts); } catch { return { skipped: 'okunamadı' }; }
+  if (!evs.length) return { skipped: 'bu saat olay yok' };
+  const fresh = evs.filter((e) => !e.fed);
+  const all = evs;
+  const nC = all.filter((e) => e.kind === 'close').length, nO = all.length - nC;
+  const syms = [...new Set(all.map((e) => e.x.symbol))];
+  const recs = new Map();
+  for (const sym of syms) recs.set(sym, await record(sym));
+  const parts = [nC && `${nC} closed`, nO && `${nO} opened`].filter(Boolean).join(', ');
+  const partsTR = [nC && `${nC} kapanış`, nO && `${nO} açılış`].filter(Boolean).join(', ');
+  const head = all.length === 1 ? null : pick([`This hour on my paper account 👇 (${parts})`, `Hourly recap 🕐 ${parts}`, `What happened this hour: ${parts} 👇`]);
+  const lines = all.map((e) => evLineEN(e, recs.get(e.x.symbol)));
+  const recLine = (r, tr) => {
+    if (!r.n) return null;
+    const side = [r.L && `${r.L} long`, r.S && `${r.S} short`].filter(Boolean).join(' / ');
+    const pf = r.pf === Infinity ? (tr ? 'zararlı işlem yok' : 'no losing trade') : `PF ${(tr ? TR : EN)(r.pf, 2)}`;
+    const v = (tr ? recTR(r) : recEN(r)).v;
+    return tr ? `${r.tag}: ${r.n} işlem (${side}), kazanma %${r.wr}, ${pf}. ${v}`.trim() : `${r.tag}: ${r.n} trade${r.n > 1 ? 's' : ''} (${side}), ${r.wr}% win rate, ${pf}. ${v}`.trim();
+  };
+  const verdicts = syms.map((sym) => recLine(recs.get(sym), false)).filter(Boolean);
+  const wl = wallet != null ? pick([`Paper wallet now ${EN(wallet, 2)} USDT.`, `Wallet: ${EN(wallet, 2)} USDT (paper).`]) : 'Paper account.';
+  const tags = syms.map((sym) => `$${coin(sym)}`).join(' ');
+  const text = [head, ...lines, '', ...verdicts, wl, `${tags} #trading #crypto #papertrading`].filter((x) => x !== null).join('\n').replace(/\n{3,}/g, '\n\n');
+
+  const ts = all[all.length - 1].ts, day = new Date(ts).toISOString().slice(0, 10);
+  const id = `${day}-trade-digest-${String(ts).slice(-9)}`;
+  if (fresh.length) {
+    const trLines = all.map((e) => evLineTR(e, recs.get(e.x.symbol)));
+    const trV = syms.map((sym) => recLine(recs.get(sym), true)).filter(Boolean);
+    const post = {
+      id, topic: 'crypto', agent: AGENT, posted_at: new Date(ts).toISOString().replace(/\.\d+Z$/, 'Z'),
+      title: (head || lines[0]).slice(0, 80), hook: head ? lines[0] : (verdicts[0] || wl), body: [[...(head ? lines.slice(1) : []), ...verdicts, wl].join(' ')],
+      meaning: 'What it means: this is a paper trade with real fees, slippage and funding counted, so the coin\'s running record matters more than any single trade.',
+      tags: ['Crypto', ...syms.map(coin), 'Paper trading'],
+      sources: syms.slice(0, 3).map((sym) => ({ title: `Binance USDT-M Futures: ${sym}`, url: `https://www.binance.com/en/futures/${sym}`, date: day })),
+      media: null, more: null, linkedin: null, reviewed: false, comments: [],
+      tr: { title: (all.length === 1 ? trLines[0] : `Bu saat: ${partsTR}`).slice(0, 80), hook: all.length === 1 ? (trV[0] || '') : trLines[0], body: [[...(all.length === 1 ? [] : trLines.slice(1)), ...trV, wallet != null ? `Kağıt kasa ${TR(wallet, 2)} USDT.` : ''].join(' ')], meaning: 'Ne anlama geliyor: komisyon, kayma ve funding dahil kağıt üzerinde bir işlem; tek işlemden çok coinin birikmiş karnesi önemli.' },
+    };
+    try { await db.put('feed', id, post); } catch {}
+    for (const e of fresh) { try { await db.put('sqev', e.k, { ...e, fed: true }); } catch {} }
+  }
+  const res = await square('digest', id, text);
+  const transient = !res.skipped && !res.ok && ['FETCH', '10007', '220009'].includes(String(res.code)) || String(res.code).startsWith('HTTP 5');
+  if (!transient) for (const e of all) { try { await db.del('sqev', e.k); } catch {} }
+  return { events: all.length, text, ...res };
 }
 
-// Feed list; trades and positions from before the feed existed are backfilled once and stored.
+// Feed list; trades and positions from before digests existed are backfilled once and stored.
 async function feedList() {
   const stored = await db.list('feed');
   const have = new Set(stored.map((x) => x.id));
   const fid = (ts, id, kind) => `${new Date(ts).toISOString().slice(0, 10)}-trade-${id.toLowerCase()}-${kind}`;
   const [trades, open] = await Promise.all([db.list('trade'), db.list('pos')]);
   for (const t of trades) {
-    if (!have.has(fid(t.openedAt, t.id, 'open'))) { const r = await record(t.symbol, t.openedAt); await feed('open', { ...t, lev: t.lev }, openEN(t, r), openTR(t, r), t.openedAt); }
-    if (!have.has(fid(t.closedAt, t.id, 'close'))) { const r = await record(t.symbol, t.closedAt); await feed('close', t, closeEN(t, r), closeTR(t, r), t.closedAt); }
+    if (t.openedAt < DIGEST_SINCE && !have.has(fid(t.openedAt, t.id, 'open'))) { const r = await record(t.symbol, t.openedAt); await feed('open', { ...t, lev: t.lev }, openEN(t, r), openTR(t, r), t.openedAt); }
+    if (t.closedAt < DIGEST_SINCE && !have.has(fid(t.closedAt, t.id, 'close'))) { const r = await record(t.symbol, t.closedAt); await feed('close', t, closeEN(t, r), closeTR(t, r), t.closedAt); }
   }
-  for (const p of open) if (!have.has(fid(p.openedAt, p.id, 'open'))) { const r = await record(p.symbol, p.openedAt); await feed('open', p, openEN(p, r), openTR(p, r), p.openedAt); }
+  for (const p of open) if (p.openedAt < DIGEST_SINCE && !have.has(fid(p.openedAt, p.id, 'open'))) { const r = await record(p.symbol, p.openedAt); await feed('open', p, openEN(p, r), openTR(p, r), p.openedAt); }
   return (await db.list('feed')).sort((a, b) => (a.posted_at < b.posted_at ? 1 : -1)).slice(0, 60);
 }
 
-// Manual catch-up: post open/close events of the last `sinceH` hours that have no successful Square post yet.
-async function postRecent(sinceH = 1.5) {
-  const from = Date.now() - sinceH * 3.6e6;
-  const [log, trades, open] = await Promise.all([db.list('square').catch(() => []), db.list('trade'), db.list('pos')]);
-  const done = new Set(log.filter((x) => x.ok).map((x) => `${x.pos}_${x.kind}`));
-  const out = [];
-  const ev = [
-    ...trades.filter((t) => t.openedAt >= from).map((t) => ({ ts: t.openedAt, kind: 'open', id: t.id, run: () => onOpen({ ...t, sl_pct: pct(t.entry, t.sl), tp_pct: pct(t.entry, t.tp) }) })),
-    ...open.filter((p) => p.openedAt >= from).map((p) => ({ ts: p.openedAt, kind: 'open', id: p.id, run: () => onOpen({ ...p, sl_pct: pct(p.entry, p.sl), tp_pct: pct(p.entry, p.tp) }) })),
-    ...trades.filter((t) => t.closedAt >= from).map((t) => ({ ts: t.closedAt, kind: 'close', id: t.id, run: () => onClose(t) })),
-  ].sort((a, b) => a.ts - b.ts);
-  for (const e of ev) {
-    if (done.has(`${e.id}_${e.kind}`)) { out.push({ id: e.id, kind: e.kind, skipped: 'already posted' }); continue; }
-    out.push({ id: e.id, kind: e.kind, ...(await e.run()) });
-  }
-  return { since_h: sinceH, events: out.length, results: out };
-}
-
-module.exports = { postOpen: onOpen, postClose: onClose, feedList, postRecent, _t: { openEN, openTR, closeEN, closeTR, record, recEN } };
+module.exports = { postOpen: onOpen, postClose: onClose, feedList, flushDigest, _t: { openEN, openTR, closeEN, closeTR, record, recEN } };
