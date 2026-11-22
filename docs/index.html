@@ -98,7 +98,7 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:#18202f}
 .tnav{display:flex;gap:2px}.tnav .nl{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:60px;padding:6px 8px;background:none;border:0;border-bottom:2px solid transparent;color:var(--mut);text-decoration:none;font:500 12px/1 Inter,sans-serif;cursor:pointer}.tnav .nl:hover{color:var(--tx);border-bottom-color:var(--g)}.tnav .nl svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.tnav .nl[hidden]{display:none}
 @media(max-width:900px){.hdr-r{align-items:flex-start}.tnav .nl{min-width:0;padding:6px;font-size:11px}}
 .br{display:block;width:100%;margin-top:10px;padding:11px 14px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);color:var(--tx);font:600 14px Inter,sans-serif;text-align:left;cursor:pointer}.br:disabled{opacity:.4;cursor:not-allowed}
-.dl{font:600 12.5px Inter,sans-serif;color:#0b0e13;background:var(--g);border:0;border-radius:99px;padding:7px 14px;cursor:pointer}.dl:hover{filter:brightness(1.1)}.dl[hidden]{display:none}
+.dl{font:600 12.5px Inter,sans-serif;color:#0b0e13;background:var(--g);border:0;border-radius:99px;padding:7px 14px;cursor:pointer}.dl:hover{filter:brightness(1.1)}.dl.off{background:var(--panel2);color:var(--mut);box-shadow:inset 0 0 0 1px var(--line)}.dl.off:hover{filter:none}.dl[hidden]{display:none}
 #pwa-install{position:fixed;right:18px;bottom:18px;z-index:40;display:inline-flex;align-items:center;gap:8px;font:600 13px Inter,sans-serif;color:#0b0e13;background:var(--g);border:0;border-radius:99px;padding:10px 18px;cursor:pointer;box-shadow:0 8px 24px #0009}#pwa-install[hidden]{display:none}
 </style>
 </head>
@@ -470,13 +470,13 @@ async function load() {
   let own = /[?&]source=pwa/.test(location.search); try { if (own) sessionStorage.setItem('ctApp', '1'); own = own || sessionStorage.getItem('ctApp') === '1'; } catch (e) {}
   const standalone = own && (matchMedia('(display-mode: standalone)').matches || navigator.standalone); // hide only inside Claude Trader's own installed app, not when opened from another app (e.g. Power Analytics)
   if (standalone && ab) ab.hidden = true;
+  const inOtherApp = !own && (matchMedia('(display-mode: standalone)').matches || navigator.standalone); // opened from another installed app (e.g. Power Analytics)
+  if (inOtherApp && ab) ab.classList.add('off');
   addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferred = e; }); // single install button: the header one
   const install = () => {
     if (deferred) { deferred.prompt(); deferred.userChoice.finally(() => { deferred = null; btn.hidden = true; }); return; }
     const ua = navigator.userAgent, ios = /iPhone|iPad|iPod/.test(ua), android = /Android/.test(ua), en = lang === 'en';
-    const inOtherApp = !own && (matchMedia('(display-mode: standalone)').matches || navigator.standalone);
-    if (inOtherApp && android) { const u = location.host + location.pathname; location.href = `intent://${u}#Intent;scheme=https;action=android.intent.action.VIEW;S.browser_fallback_url=${encodeURIComponent('https://' + u)};end`; return; }
-    if (inOtherApp && !ios) { window.open(location.origin + location.pathname, '_blank', 'noopener'); return; }
+    if (inOtherApp) { $('imB').innerHTML = en ? 'To install the app, open this page from your <b>browser</b>.' : 'Uygulamayı yüklemek için bu sayfaya <b>tarayıcınızdan</b> girin.'; $('im').hidden = false; return; }
     const tr = ios ? 'Safari\'de aç → alttaki <b>Paylaş</b> düğmesi → <b>Ana Ekrana Ekle</b>.'
       : android ? 'Chrome\'da sağ üstteki <b>⋮</b> menü → <b>Uygulamayı yükle</b> (ya da <b>Ana ekrana ekle</b>). Sayfa başka bir uygulamanın içinde açıldıysa önce <b>Chrome\'da aç</b>.'
       : 'Chrome ya da Edge\'de adres çubuğunun sağındaki <b>yükle</b> simgesine (⊕) bas. Görünmüyorsa <b>⋮</b> menü → <b>Yayınla, kaydet ve paylaş</b> → <b>Sayfayı uygulama olarak yükle</b>.';
