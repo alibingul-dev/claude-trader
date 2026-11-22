@@ -470,7 +470,7 @@ async function load() {
   let own = /[?&]source=pwa/.test(location.search); try { if (own) sessionStorage.setItem('ctApp', '1'); own = own || sessionStorage.getItem('ctApp') === '1'; } catch (e) {}
   const standalone = own && (matchMedia('(display-mode: standalone)').matches || navigator.standalone); // hide only inside Claude Trader's own installed app, not when opened from another app (e.g. Power Analytics)
   if (standalone && ab) ab.hidden = true;
-  addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferred = e; btn.hidden = false; });
+  addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferred = e; }); // single install button: the header one
   const install = () => {
     if (deferred) { deferred.prompt(); deferred.userChoice.finally(() => { deferred = null; btn.hidden = true; }); return; }
     const ua = navigator.userAgent, ios = /iPhone|iPad|iPod/.test(ua), android = /Android/.test(ua), en = lang === 'en';
