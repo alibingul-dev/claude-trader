@@ -95,6 +95,7 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:#18202f}
 @media(prefers-reduced-motion:reduce){#ct-intro{display:none!important}}
 .sbox{display:flex;flex-direction:column;gap:18px;padding-top:6px}.sbox .r{display:grid;grid-template-columns:64px 1fr auto;align-items:center;gap:6px 12px}.sbox .n{font-size:20px;font-weight:600;text-align:right}.sbox .m{grid-column:2/4;color:var(--mut);font-size:12px}.sbox .tr{height:6px;border-radius:3px;background:var(--panel2);overflow:hidden}.sbox .tr>i{display:block;height:100%;border-radius:3px}
 .gloss{margin-top:12px;padding-top:10px;border-top:1px solid var(--line);color:var(--mut);font-size:12px;line-height:1.6}.gloss b{color:var(--tx);font-weight:500}
+.appbtn{align-self:stretch;background:var(--g);color:#0b0e13;border:0;border-radius:8px;padding:8px 10px;font:600 12.5px Inter,sans-serif;cursor:pointer}.appbtn[hidden]{display:none}
 #pwa-install{position:fixed;right:18px;bottom:18px;z-index:40;display:inline-flex;align-items:center;gap:8px;font:600 13px Inter,sans-serif;color:#0b0e13;background:var(--g);border:0;border-radius:99px;padding:10px 18px;cursor:pointer;box-shadow:0 8px 24px #0009}#pwa-install[hidden]{display:none}
 </style>
 </head>
@@ -117,11 +118,13 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:#18202f}
   <div class="nav"><a href="#ozet" data-go="ozet"><span class="bar"></span>Özet</a><a href="#grafik" data-go="grafik"><span class="bar"></span>Grafikler</a><a href="#acik" data-go="acik"><span class="bar"></span>Açık pozisyonlar</a><a href="#yon" data-go="yon"><span class="bar"></span>Yön bazında performans</a><a href="#coin" data-go="coin"><span class="bar"></span>Coin performansı</a><a href="#gecmis" data-go="gecmis"><span class="bar"></span>İşlem geçmişi</a><a href="#pas" data-go="pas"><span class="bar"></span>Pas geçilenler</a><a href="#strateji" data-go="strateji"><span class="bar"></span>Strateji sürümleri</a></div>
   <div class="rail-foot">
     <div class="author raw"><div class="nm">Ali Bingül</div><div class="row"><a class="ab" href="https://alibingul-dev.github.io" target="_blank" rel="noopener">About the author</a><a class="ic" href="https://www.linkedin.com/in/ali-bing%C3%BCl-b0666a30" target="_blank" rel="noopener" aria-label="LinkedIn"><svg viewBox="0 0 24 24" width="17" height="17"><path fill="currentColor" d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.35V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 1 1 0-4.13 2.06 2.06 0 0 1 0 4.13zM7.12 20.45H3.56V9h3.56v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.73v20.54C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.73V1.73C24 .77 23.2 0 22.22 0z"/></svg></a><a class="ic" href="https://github.com/alibingul-dev" target="_blank" rel="noopener" aria-label="GitHub"><svg viewBox="0 0 24 24" width="17" height="17"><path fill="currentColor" d="M12 .3a12 12 0 0 0-3.8 23.38c.6.12.83-.26.83-.57v-2.23c-3.34.73-4.04-1.42-4.04-1.42-.55-1.39-1.33-1.76-1.33-1.76-1.09-.74.08-.73.08-.73 1.2.09 1.84 1.24 1.84 1.24 1.07 1.83 2.8 1.3 3.49 1 .1-.78.42-1.31.76-1.61-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.14-.3-.54-1.52.1-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.28-1.55 3.29-1.23 3.29-1.23.64 1.66.24 2.88.12 3.18.77.84 1.23 1.91 1.23 3.22 0 4.61-2.81 5.63-5.48 5.92.42.36.81 1.1.81 2.22v3.29c0 .32.21.69.82.57A12 12 0 0 0 12 .3"/></svg></a></div></div>
+    <button class="appbtn" id="appbtn" type="button">📲 Uygulama olarak yükle</button>
     <span class="lang"><button data-l="tr">TR</button><button data-l="en">EN</button></span>
   </div>
 </nav>
 <div class="scrim" id="scrim" hidden></div>
 <button id="pwa-install" type="button" hidden>⬇ Uygulamayı yükle</button>
+<div class="modal" id="im" hidden><div class="card" style="width:min(520px,100%)"><div class="hd"><h2 style="margin:0">Uygulama olarak yükle</h2><button class="x" id="imX" type="button">Kapat ✕</button></div><div class="sub" id="imB" style="line-height:1.7"></div></div></div>
 <div class="modal" id="pm" hidden><div class="card"><div class="hd"><div><h2 id="pmT" style="margin:0 0 4px"></h2><div class="sub" id="pmS"></div></div><button class="x" id="pmX" type="button">Kapat ✕</button></div><div class="chart"><canvas id="cPm"></canvas></div><div class="leg" id="pmL"></div></div></div>
 <div class="page">
 <div class="ticker"><div class="track mono" id="tick">yükleniyor…</div></div>
@@ -221,7 +224,7 @@ const PHR = [
   ['Başlangıç (USDT)', 'Start (USDT)'], ['aktif strateji', 'active strategy'], ['son veri', 'last data'], ['gerçekleşen', 'realised'], ['açık pozisyon', 'open positions'],
   ['başlangıç kasası', 'starting wallet'], ['nakit', 'cash'], ['açık ', 'unrealised '], [' gün', ' days'], ['piyasa özeti', 'market snapshot'], ['strateji v', 'strategy v'],
   ['Equity ve drawdown', 'Equity & drawdown'], ['Coin performansı', 'Performance by coin'], ['Grafikler', 'Charts'], ['Pas geçilenler', 'Skipped trades'], ['Durma kararı sonucu', 'Stand-aside verdict'], ['Açılsaydı net', 'Net if opened'], ['Açılsaydı PnL', 'PnL if opened'], ['Doğru pas (zararla biterdi)', 'Correct skips (would have lost)'], ['Hâlâ izlenen', 'Still tracked'], ['açılmadı, 1 dakikalık mumlarla izleniyor', 'not opened, tracked on 1m candles'], ['İzlenen pas geçilen adaylar', 'Tracked skipped candidates'], ['Sonuçlanan pas geçilen adaylar', 'Resolved skipped candidates'], ['Neden açılmadı', 'Why not opened'], ['Çıkış nedeni', 'Exit reason'], ['Pas kararı', 'Skip verdict'], ['İzlenen pas yok', 'No tracked skips'], ['Henüz sonuçlanan pas yok', 'No resolved skips yet'], ['henüz sonuçlanan pas yok', 'no resolved skips yet'], ['zarardan korudu', 'loss avoided'], ['kâr kaçırttı', 'profit missed'], ['durmak ', 'standing aside: '], [' pas ·', ' skips ·'], ['Özet', 'Overview'], ['Geç ›', 'Skip ›'],
-  ['İzlenen hareketli coinler (pozisyon değil) ›', 'Watched top movers (not positions) ›'], ['Fiyat (USDT)', 'Price (USDT)'], ['Giriş / çıkış noktası', 'Entry / exit point'], ['mum aralığı', 'candle interval'], ['kayıt tutulmaz, Binance’ten anlık çekilir', 'not stored, fetched live from Binance'], ['Grafik alınamadı', 'Chart unavailable'], ['Kapat ✕', 'Close ✕'], ['⬇ Uygulamayı yükle', '⬇ Install app'], ['hâlâ açık', 'still open'], ['Pas geçilen (izleniyor)', 'Skipped (tracked)'], ['Pas geçilen', 'Skipped'], ['giriş ', 'entry '], ['çıkış ', 'exit '], [' mum', ' candles'], ['(24 saatte)', '(24h)'], ['(1 saatte)', '(1h)'], ['Sistem güncelleniyor, sayfa birazdan kendiliğinden yenilenecek…', 'Updating the system, the page will refresh by itself shortly…'], ['yükleniyor…', 'loading…'], ['TSİ', 'Istanbul'],
+  ['İzlenen hareketli coinler (pozisyon değil) ›', 'Watched top movers (not positions) ›'], ['Fiyat (USDT)', 'Price (USDT)'], ['Giriş / çıkış noktası', 'Entry / exit point'], ['mum aralığı', 'candle interval'], ['kayıt tutulmaz, Binance’ten anlık çekilir', 'not stored, fetched live from Binance'], ['Grafik alınamadı', 'Chart unavailable'], ['Kapat ✕', 'Close ✕'], ['⬇ Uygulamayı yükle', '⬇ Install app'], ['📲 Uygulama olarak yükle', '📲 Install as app'], ['Uygulama olarak yükle', 'Install as app'], ['hâlâ açık', 'still open'], ['Pas geçilen (izleniyor)', 'Skipped (tracked)'], ['Pas geçilen', 'Skipped'], ['giriş ', 'entry '], ['çıkış ', 'exit '], [' mum', ' candles'], ['(24 saatte)', '(24h)'], ['(1 saatte)', '(1h)'], ['Sistem güncelleniyor, sayfa birazdan kendiliğinden yenilenecek…', 'Updating the system, the page will refresh by itself shortly…'], ['yükleniyor…', 'loading…'], ['TSİ', 'Istanbul'],
 ];
 const EXACT = { 'İşlem': 'Trades', 'adet': 'count', 'işlem': 'trades', 'dk': 'min', 'Yön': 'Side', 'Neden': 'Reason', 'Gördüm': 'Saw', 'Karar': 'Decision', 'Beklenti': 'Expectation',
   'SÜRE': 'TIME', 'LİKİDASYON': 'LIQUIDATION', 'MANUEL': 'MANUAL', 'Doğru': 'Correct', 'Yanlış': 'Wrong' };
@@ -457,10 +460,25 @@ async function load() {
 })();
 (function () {
   if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
-  let deferred = null; const btn = $('pwa-install');
+  let deferred = null; const btn = $('pwa-install'), ab = $('appbtn');
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  if (standalone) ab.hidden = true;
   addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferred = e; btn.hidden = false; });
-  btn.addEventListener('click', () => { if (!deferred) return; deferred.prompt(); deferred.userChoice.finally(() => { deferred = null; btn.hidden = true; }); });
-  addEventListener('appinstalled', () => { btn.hidden = true; });
+  const install = () => {
+    if (deferred) { deferred.prompt(); deferred.userChoice.finally(() => { deferred = null; btn.hidden = true; }); return; }
+    const ua = navigator.userAgent, ios = /iPhone|iPad|iPod/.test(ua), android = /Android/.test(ua), en = lang === 'en';
+    const tr = ios ? 'Safari\'de aç → alttaki <b>Paylaş</b> düğmesi → <b>Ana Ekrana Ekle</b>.'
+      : android ? 'Chrome\'da sağ üstteki <b>⋮</b> menü → <b>Uygulamayı yükle</b> (ya da <b>Ana ekrana ekle</b>). Sayfa başka bir uygulamanın içinde açıldıysa önce <b>Chrome\'da aç</b>.'
+      : 'Chrome ya da Edge\'de adres çubuğunun sağındaki <b>yükle</b> simgesine (⊕) bas. Görünmüyorsa <b>⋮</b> menü → <b>Yayınla, kaydet ve paylaş</b> → <b>Sayfayı uygulama olarak yükle</b>.';
+    const enT = ios ? 'Open in Safari → tap <b>Share</b> → <b>Add to Home Screen</b>.'
+      : android ? 'In Chrome tap <b>⋮</b> → <b>Install app</b> (or <b>Add to Home screen</b>). If the page opened inside another app, choose <b>Open in Chrome</b> first.'
+      : 'In Chrome or Edge click the <b>install</b> icon (⊕) on the right of the address bar. If it is not there: <b>⋮</b> menu → <b>Cast, save and share</b> → <b>Install page as app</b>.';
+    $('imB').innerHTML = (en ? enT : tr) + (en ? '<br><br>After that the app opens with one tap from your home screen or desktop.' : '<br><br>Sonrasında uygulama ana ekrandan ya da masaüstünden tek dokunuşla açılır.');
+    $('im').hidden = false; applyLang();
+  };
+  btn.addEventListener('click', install); ab.addEventListener('click', install);
+  $('imX').addEventListener('click', () => { $('im').hidden = true; });
+  addEventListener('appinstalled', () => { btn.hidden = true; ab.hidden = true; });
 })();
 (function () {
   const fd = $('feed'); let hold = false, tm = 0, acc = 0;
