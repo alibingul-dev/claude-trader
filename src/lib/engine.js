@@ -63,6 +63,7 @@ function compactPos(p) {
     upnl_usdt: rd(p.qty * (last - p.entry) * p.dir + p.funding - p.feeIn, 4),
     mfe_pct: rd(p.mfe, 2), mae_pct: rd(p.mae, 2),
     age_h: rd((Date.now() - p.openedAt) / 3.6e6, 1), openedAt: p.openedAt, version: p.version,
+    ...(p.supports ? { supports: p.supports, lab: !!p.lab } : {}),
   };
 }
 
@@ -137,6 +138,7 @@ async function settle(pos, exit, s, book = REAL) {
     entry: pos.entry, exit: px, sl: pos.sl, tp: pos.tp, sl_pct: pos.sl_pct, tp_pct: pos.tp_pct,
     qty: pos.qty, notional: pos.notional, margin: pos.margin,
     gross, feeIn: pos.feeIn, feeOut, funding: pos.funding, net,
+    ...(pos.supports ? { supports: pos.supports, lab: !!pos.lab, exitKind: pos.exitKind || 'STD' } : {}),
     roiMarginPct: (net / pos.margin) * 100, mfe: pos.mfe, mae: pos.mae,
     exitReason: exit.reason, walletAfter: s.wallet,
   };
@@ -161,6 +163,7 @@ async function processPos(pos, s, now, book = REAL) {
 const compactTrade = (t) => ({
   id: t.id, sym: t.symbol, side: t.side, exit_reason: t.exitReason, hold_min: t.holdMin,
   net_usdt: rd(t.net, 4), roi_margin_pct: rd(t.roiMarginPct, 1), mfe_pct: rd(t.mfe, 2), version: t.version,
+  ...(t.supports ? { supports: t.supports, lab: !!t.lab } : {}),
   ...(t.square ? { square: t.square.ok ? t.square.url || 'ok' : t.square.skipped || `HATA ${t.square.code}` } : {}),
 });
 
@@ -205,6 +208,87 @@ async function snapshot() {
   );
 }
 
+
+// ---------- strategy lab ----------
+// Coded entry rules of every strategy run so far plus lab candidates. Every hour each rule is evaluated on the
+// snapshot; matches become shadow positions (never touch the wallet) tagged with every strategy that supports them.
+const clampSl = (atr, k, lo, hi) => rd(Math.min(hi, Math.max(lo, atr * k)), 2);
+const EXITS = {
+  STD: (m) => { const sl = clampSl(m.atr1h, 1, 0.8, 2.5); return { sl_pct: sl, tp_pct: rd(sl * 3, 2), max_hold_h: 12 }; },
+  WIDE: (m) => { const sl = clampSl(m.atr1h, 1.5, 1.2, 4); return { sl_pct: sl, tp_pct: rd(sl * 2, 2), max_hold_h: 12 }; },
+};
+const momSide = (m, b) =>
+  m.ch24 > 0 && m.ch4h > 0 && m.ch1h > 0 && m.rng >= 0.7 && m.vr >= 1.3 && m.fund <= 0.05 && b.ch1h > -0.5 ? 'LONG'
+    : m.ch24 < 0 && m.ch4h < 0 && m.ch1h < 0 && m.rng <= 0.3 && m.vr >= 1.3 && m.fund >= -0.05 && b.ch1h < 0.5 ? 'SHORT' : null;
+const LAB = [
+  { id: 'v1', family: 'v1', exit: 'STD', cooldownH: 0, side: momSide,
+    desc: 'Momentum devamı + BTC rejimi; SL = ATR1h ×1 (0,8–2,5 %), TP = 3×SL, 12 saat' },
+  { id: 'v2', family: 'v2', exit: 'STD', cooldownH: 12, side: momSide,
+    desc: 'v1 + aynı coine 12 saat tekrar giriş yok' },
+  { id: 'L-wide', family: null, exit: 'WIDE', cooldownH: 12, side: momSide,
+    desc: 'v2 girişleri, geniş stop: SL = ATR1h ×1,5 (1,2–4 %), TP = 2×SL' },
+  { id: 'L-btc', family: null, exit: 'STD', cooldownH: 12,
+    side: (m, b) => { const x = momSide(m, b); return (x === 'LONG' && b.ch1h > 0) || (x === 'SHORT' && b.ch1h < 0) ? x : null; },
+    desc: 'v2 girişleri + BTC aynı yönde (LONG: BTC 1s > 0 %, SHORT: BTC 1s < 0 %)' },
+];
+const labStatus = (L, ver) => (L.family ? (String(ver).startsWith(L.family) ? 'aktif' : 'vazgeçildi') : 'aday');
+
+// Strategies (by id) whose rule fires for this symbol/side on this snapshot, respecting each one's cooldown.
+function labSupports(market, sym, side, recent, now) {
+  const b = market.find((x) => x.s === 'BTCUSDT');
+  const m = market.find((x) => x.s === sym);
+  if (!b || !m || sym === 'BTCUSDT') return [];
+  return LAB.filter((L) => L.side(m, b) === side &&
+    !(L.cooldownH && recent.some((t) => t.symbol === sym && t.closedAt > now - L.cooldownH * 3.6e6 &&
+      (!t.supports || t.supports.includes(L.id)))))
+    .map((L) => L.id);
+}
+
+async function labScan(market, s, now) {
+  const b = market.find((x) => x.s === 'BTCUSDT');
+  if (!b) return [];
+  const [spos, strades, trades, open] = await Promise.all([db.list('spos'), db.list('strade'), db.list('trade'), db.list('pos')]);
+  const recent = [...strades.slice(-500), ...trades.slice(-200)];
+  const groups = new Map(); // sym|side|exit -> { m, side, exit, ids }
+  for (const m of market) {
+    if (m.s === 'BTCUSDT') continue;
+    for (const side of ['LONG', 'SHORT']) {
+      for (const id of labSupports(market, m.s, side, recent, now)) {
+        const L = LAB.find((x) => x.id === id);
+        const k = `${m.s}|${side}|${L.exit}`;
+        if (!groups.has(k)) groups.set(k, { m, side, exit: L.exit, ids: [] });
+        groups.get(k).ids.push(id);
+      }
+    }
+  }
+  const made = [];
+  for (const g of groups.values()) {
+    const ex = spos.find((p) => p.symbol === g.m.s && p.side === g.side && (p.exitKind || 'STD') === g.exit);
+    if (ex) { // already tracked: just record the extra supporters
+      const add = g.ids.filter((i) => !(ex.supports || []).includes(i));
+      if (add.length) { ex.supports = [...(ex.supports || []), ...add]; await db.put('spos', ex.id, ex); }
+      continue;
+    }
+    try {
+      const { pos } = await buildPos({ symbol: g.m.s, side: g.side, ...EXITS[g.exit](g.m), reason: `LAB: ${g.ids.join(', ')} kuralı tuttu` }, s, open);
+      s.sseq = (s.sseq || 0) + 1;
+      pos.id = `S${s.sseq}`;
+      Object.assign(pos, { skipped: true, lab: true, exitKind: g.exit, supports: g.ids });
+      await db.put('spos', pos.id, pos);
+      made.push({ id: pos.id, sym: pos.symbol, side: pos.side, exit: g.exit, supports: g.ids });
+    } catch (e) { made.push({ sym: g.m.s, side: g.side, error: e.message.slice(0, 120) }); }
+  }
+  await db.put('state', 'main', s);
+  return made;
+}
+
+function labStats(strades, ver, now) {
+  return Object.fromEntries(LAB.map((L) => {
+    const ts = strades.filter((t) => (t.supports || []).includes(L.id));
+    return [L.id, { status: labStatus(L, ver), rule: L.desc, all: stats(ts), last24h: stats(ts.filter((t) => t.closedAt > now - 864e5)) }];
+  }));
+}
+
 // ---------- tools ----------
 async function hourClose() {
   const s = await getState();
@@ -227,6 +311,8 @@ async function hourClose() {
   await db.put('equity', pad(now), { ts: now, wallet: s.wallet, equity, open: open.length });
   const market = await snapshot();
   await db.put('market', 'last', { ts: now, market });
+  let labNew;
+  try { labNew = await labScan(market, s, now); } catch (e) { labNew = { error: e.message.slice(0, 200) }; }
   return {
     ts_utc: new Date(now).toISOString(),
     version: s.version,
@@ -236,6 +322,7 @@ async function hourClose() {
     open: open.map(compactPos),
     skipped_closed_this_hour: skippedClosed.map(compactTrade),
     skipped_open: (await db.list('spos')).map(compactPos),
+    lab_new_this_hour: labNew,
     market_keys: 'px USDT · ch24/ch4h/ch1h % · atr1h % (14x1h) · vr = son 1h hacim / 24h ort · rng 0..1 = 24h aralıktaki yeri · fund % / 8h · qvM M USDT',
     market,
   };
@@ -316,12 +403,22 @@ async function skipPosition({ symbol, side, sl_pct, tp_pct, max_hold_h = 24, rea
   checkArgs({ symbol, side, sl_pct, tp_pct, max_hold_h });
   const s = await getState();
   const open = await db.list('pos');
-  if ((await db.list('spos')).some((p) => p.symbol === symbol && p.side === side))
-    throw new Error(`${symbol} ${side} zaten pas geçilenler listesinde izleniyor`);
+  const dup = (await db.list('spos')).find((p) => p.symbol === symbol && p.side === side);
+  if (dup && dup.lab) { // lab already tracks it: turn it into a real stand-aside decision
+    dup.lab = false; dup.reason = `${String(reason).slice(0, 300)} | ${dup.reason}`.slice(0, 500);
+    await db.put('spos', dup.id, dup);
+    return { skipped: compactPos(dup), note: 'Laboratuvar bu adayı zaten izliyordu; pas kararı olarak işaretlendi.' };
+  }
+  if (dup) throw new Error(`${symbol} ${side} zaten pas geçilenler listesinde izleniyor`);
   const { pos } = await buildPos({ symbol, side, sl_pct, tp_pct, max_hold_h, reason }, s, open);
   s.sseq = (s.sseq || 0) + 1;
   pos.id = `S${s.sseq}`;
   pos.skipped = true;
+  try {
+    const mk = await db.getOne('market', 'last');
+    const recent = [...(await db.list('strade')).slice(-500), ...(await db.list('trade')).slice(-200)];
+    pos.supports = mk ? labSupports(mk.market, symbol, side, recent, Date.now()) : [];
+  } catch (e) { pos.supports = []; }
   await db.put('spos', pos.id, pos);
   await db.put('state', 'main', s);
   return { skipped: compactPos(pos), note: 'Kasaya dokunmaz; açılsaydı ne olurdu diye 1m mumlarla izlenir.' };
@@ -377,6 +474,7 @@ async function performance({ version } = {}) {
     filter: version || 'all', ...stats(trades),
     by_version: Object.fromEntries(Object.entries(byVersion).map(([v, ts]) => [v, stats(ts)])),
     last10: trades.slice(-10).map(compactTrade),
+    lab: labStats(await db.list('strade'), s.version, Date.now()),
   };
 }
 
@@ -438,10 +536,11 @@ async function dashboardData() {
     state, open: pos.map(compactPos), trades, equity: equity.slice(-3000),
     decisions: decisions.slice(-300), strategies, market,
     skipped_open: spos.map(compactPos), skipped: strades.slice(-1000),
+    lab: LAB.map((L) => ({ id: L.id, rule: L.desc, status: labStatus(L, state.version) })),
   };
 }
 
 module.exports = {
   hourClose, openPosition, skipPosition, closePosition, performance, logDecision, setStrategy, getStrategy, dashboardData,
-  _test: { replay, leverageFor, notionalFor, CFG },
+  _test: { replay, leverageFor, notionalFor, CFG, labSupports, LAB },
 };
