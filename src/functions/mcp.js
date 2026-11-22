@@ -64,12 +64,12 @@ const TOOLS = [
   },
   {
     name: 'log_decision',
-    description: 'Saatin kararını ve gerekçesini dashboard karar günlüğüne yazar. Her koşunun SON çağrısı.',
+    description: 'Saatin kararını ve gerekçesini dashboard karar günlüğüne yazar. Her koşunun SON çağrısı. Metin herkese açık sitede yayınlanır: kısaltmasız, sade dille yaz.',
     inputSchema: {
       type: 'object',
       required: ['summary'],
       properties: {
-        summary: { type: 'string', description: 'Bu saatin kararı ve nedeni, 1–3 cümle' },
+        summary: { type: 'string', description: 'Bu saatin kararı ve nedeni, 1–3 cümle. SADE DİL: ilk kez okuyan anlasın; ch1h/ch4h/ch24/vr/rng/fund/atr1h/MFE kısaltmalarını YAZMA. Örnek: "BTC ch1h −0,59 %" yerine "BTC son 1 saatte %0,59 düştü"; "vr 1,3" yerine "hacim ortalamanın 1,3 katı"; "rng 0,85" yerine "fiyat 24 saatlik aralığın tepesine yakın". Biçim aynı kalır: "Gördüm: … | Karar: … | Beklenti: … || EN: Saw: … | Decision: … | Expectation: …" (EN kısmı da sade).' },
         actions: { type: 'array', items: { type: 'string' }, description: 'ör. ["OPEN P12 SOLUSDT LONG", "HOLD P11"]' },
       },
     },
