@@ -1,0 +1,36 @@
+name: binance-probe
+on:
+  push:
+    paths: ['.github/workflows/binance-probe.yml']
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe
+        run: |
+          mkdir -p probe
+          {
+            echo "time_utc: $(date -u +%FT%TZ)"
+            echo "runner_country: $(curl -s -m 10 https://ipinfo.io/country || echo ?)"
+            echo "runner_region: $(curl -s -m 10 https://ipinfo.io/region || echo ?)"
+            for u in \
+              https://fapi.binance.com/fapi/v1/ping \
+              'https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=BTCUSDT' \
+              'https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1h&limit=2' \
+              'https://fapi.binance.com/futures/data/topLongShortPositionRatio?symbol=BTCUSDT&period=1h&limit=1' \
+              https://api.binance.com/api/v3/ping ; do
+              code=$(curl -s -m 15 -o /tmp/b -w '%{http_code}' "$u")
+              echo "$code  $u  $(head -c 120 /tmp/b | tr '\n' ' ')"
+            done
+          } > probe/result.txt
+          cat probe/result.txt
+      - name: Commit result
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add probe/result.txt
+          git commit -m "probe result" && git push
