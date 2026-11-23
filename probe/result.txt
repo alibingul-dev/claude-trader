@@ -1,0 +1,8 @@
+time_utc: 2026-11-23T19:25:09Z
+runner_country: US
+runner_region: Iowa
+451  https://fapi.binance.com/fapi/v1/ping  {   "code": 0,   "msg": "Service unavailable from a restricted location according to 'b. Eligibility' in https://www.bin
+451  https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=BTCUSDT  {   "code": 0,   "msg": "Service unavailable from a restricted location according to 'b. Eligibility' in https://www.bin
+451  https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1h&limit=2  {   "code": 0,   "msg": "Service unavailable from a restricted location according to 'b. Eligibility' in https://www.bin
+451  https://fapi.binance.com/futures/data/topLongShortPositionRatio?symbol=BTCUSDT&period=1h&limit=1  {   "code": 0,   "msg": "Service unavailable from a restricted location according to 'b. Eligibility' in https://www.bin
+451  https://api.binance.com/api/v3/ping  {   "code": 0,   "msg": "Service unavailable from a restricted location according to 'b. Eligibility' in https://www.bin
