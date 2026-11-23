@@ -64,6 +64,7 @@ function compactPos(p) {
     mfe_pct: rd(p.mfe, 2), mae_pct: rd(p.mae, 2),
     age_h: rd((Date.now() - p.openedAt) / 3.6e6, 1), openedAt: p.openedAt, version: p.version,
     ...(p.supports ? { supports: p.supports, lab: !!p.lab } : {}),
+    ...(p.slMode ? { sl_mode: p.slMode, hard_sl: rd(p.hardSl, 8) } : {}),
   };
 }
 
@@ -80,7 +81,18 @@ function replay(pos, kl, now) {
     const favorable = d === 1 ? h : l;
     pos.mfe = Math.max(pos.mfe, (d * (favorable - pos.entry) / pos.entry) * 100);
     pos.mae = Math.min(pos.mae, (d * (adverse - pos.entry) / pos.entry) * 100);
-    const hitSL = d === 1 ? l <= pos.sl : h >= pos.sl;
+    const close5 = pos.slMode === 'close5';
+    if (close5) { // hard stop on the wick, soft stop only on a 5m close
+      const hitHard = d === 1 ? l <= pos.hardSl : h >= pos.hardSl;
+      if (hitHard) {
+        const gap = d === 1 ? o <= pos.hardSl : o >= pos.hardSl;
+        const px = gap ? o : pos.hardSl;
+        const beyondLiq = d === 1 ? px <= pos.liq : px >= pos.liq;
+        return { price: px, reason: beyondLiq ? 'LİKİDASYON' : 'STOP-ACİL', ts: ot };
+      }
+      if ((ot + MIN) % (5 * MIN) === 0 && (d === 1 ? c <= pos.sl : c >= pos.sl)) return { price: c, reason: 'STOP-KAPANIŞ', ts: ot };
+    }
+    const hitSL = !close5 && (d === 1 ? l <= pos.sl : h >= pos.sl);
     const hitTP = d === 1 ? h >= pos.tp : l <= pos.tp;
     if (hitSL) {
       const gap = d === 1 ? o <= pos.sl : o >= pos.sl;
@@ -231,12 +243,13 @@ const BUILTIN = [
     desc: 'v2 girişleri + BTC aynı yönde (LONG: BTC 1s > 0 %, SHORT: BTC 1s < 0 %)' },
 ];
 const MAX_CANDIDATES = 6; // active non-version candidates at once (multiple-testing guard)
-const exitKey = (e) => `${e.sl_atr_k}|${e.sl_min}|${e.sl_max}|${e.tp_mult}|${e.max_hold_h}`;
+const exitKey = (e) => `${e.sl_atr_k}|${e.sl_min}|${e.sl_max}|${e.tp_mult}|${e.max_hold_h}` + (e.sl_mode === 'close5' ? `|c5x${e.hard_mult}` : '');
 const LEGACY_EXIT = { STD: exitKey(EX_STD), WIDE: exitKey(EX_WIDE) };
 const posExitKey = (p) => p.exitKey || LEGACY_EXIT[p.exitKind || 'STD'];
 const exitArgs = (e, m) => {
   const sl = rd(Math.min(e.sl_max, Math.max(e.sl_min, m.atr1h * e.sl_atr_k)), 2);
-  return { sl_pct: sl, tp_pct: rd(sl * e.tp_mult, 2), max_hold_h: e.max_hold_h };
+  return { sl_pct: sl, tp_pct: rd(sl * e.tp_mult, 2), max_hold_h: e.max_hold_h,
+    ...(e.sl_mode === 'close5' ? { sl_mode: 'close5', hard_mult: e.hard_mult } : {}) };
 };
 
 async function labList() {
@@ -335,6 +348,11 @@ async function addLabStrategy({ id, desc, long, short, exit, cooldown_h = 12, hy
   if (short) checkConds(short, 'short');
   const e = exit || {};
   const ex = { sl_atr_k: +e.sl_atr_k, sl_min: +e.sl_min, sl_max: +e.sl_max, tp_mult: +e.tp_mult, max_hold_h: +e.max_hold_h };
+  if (e.sl_mode && e.sl_mode !== 'wick') {
+    if (e.sl_mode !== 'close5') throw new Error('exit.sl_mode: wick veya close5');
+    ex.sl_mode = 'close5'; ex.hard_mult = +(e.hard_mult ?? 2);
+    if (!(ex.hard_mult >= 1.2 && ex.hard_mult <= 4 && ex.sl_max * ex.hard_mult <= 10)) throw new Error('exit.hard_mult 1,2–4 ve sl_max × hard_mult ≤ 10 olmalı');
+  }
   if (!(ex.sl_atr_k > 0 && ex.sl_min >= 0.3 && ex.sl_max <= 10 && ex.sl_min <= ex.sl_max && ex.tp_mult > 0 && ex.max_hold_h > 0 && ex.max_hold_h <= 72))
     throw new Error('exit: sl_atr_k > 0, 0,3 ≤ sl_min ≤ sl_max ≤ 10, tp_mult > 0, 0 < max_hold_h ≤ 72');
   const activeCands = LAB.filter((L) => !L.family && !L.retired).length;
@@ -427,7 +445,7 @@ function checkArgs({ symbol, side, sl_pct, tp_pct, max_hold_h }) {
 }
 
 // Same entry, size, leverage, fees and liquidation as a real opening, without balance checks.
-async function buildPos({ symbol, side, sl_pct, tp_pct, max_hold_h, reason }, s, open) {
+async function buildPos({ symbol, side, sl_pct, tp_pct, max_hold_h, reason, sl_mode = 'wick', hard_mult = 2 }, s, open) {
   const [pi, info] = await Promise.all([bn.premium(symbol), bn.exchangeInfo()]);
   const sym = info.symbols.find((x) => x.symbol === symbol);
   if (!sym || sym.status !== 'TRADING' || sym.contractType !== 'PERPETUAL')
@@ -439,7 +457,9 @@ async function buildPos({ symbol, side, sl_pct, tp_pct, max_hold_h, reason }, s,
   if (notional < minNot) throw new Error(`${symbol} minNotional ${minNot} USDT > notional ${notional} USDT`);
 
   const lim = await coinLimits(symbol, notional);
-  const lev = leverageFor(sl_pct, lim.cap, lim.mmr);
+  const close5 = sl_mode === 'close5';
+  const riskPct = close5 ? sl_pct * hard_mult : sl_pct; // leverage must survive the hard stop
+  const lev = leverageFor(riskPct, lim.cap, lim.mmr);
   const margin = notional / lev;
   const dir = side === 'LONG' ? 1 : -1;
   const mark = +pi.markPrice;
@@ -453,6 +473,7 @@ async function buildPos({ symbol, side, sl_pct, tp_pct, max_hold_h, reason }, s,
     sl: entry * (1 - (dir * sl_pct) / 100),
     tp: entry * (1 + (dir * tp_pct) / 100),
     liq: entry * (1 - dir * (1 / lev - lim.mmr)),
+    ...(close5 ? { slMode: 'close5', hardSl: entry * (1 - (dir * riskPct) / 100), hard_pct: riskPct } : {}),
     coinMaxLev: lim.cap, levSource: lim.src,
     openedAt: now, checkedTs: now, fundingCheckedTs: now, maxHoldMs: max_hold_h * 3.6e6,
     version: s.version, reason: String(reason).slice(0, 500), mfe: 0, mae: 0,

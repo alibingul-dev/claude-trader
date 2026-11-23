@@ -102,6 +102,8 @@ const TOOLS = [
             sl_max: { type: 'number', description: 'SL üst sınırı, % (≤ 10)' },
             tp_mult: { type: 'number', description: 'TP = SL × bu çarpan' },
             max_hold_h: { type: 'number', description: 'En uzun tutma, saat (≤ 72)' },
+            sl_mode: { type: 'string', enum: ['wick', 'close5'], description: 'wick (varsayılan): stop iğneyle tetiklenir. close5: stop yalnız 5 dakikalık kapanış stopun ötesindeyse; ayrıca SL × hard_mult mesafesinde iğneyle tetiklenen acil stop' },
+            hard_mult: { type: 'number', description: 'close5 için acil stop çarpanı (1,2–4, varsayılan 2)' },
           },
         },
         cooldown_h: { type: 'number', description: 'Aynı coine tekrar giriş beklemesi, saat (varsayılan 12)' },
