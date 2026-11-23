@@ -84,7 +84,7 @@ const TOOLS = [
   {
     name: 'add_lab_strategy',
     description:
-      'Laboratuvara yeni ADAY strateji ekler (kod gerekmez). hour_close bundan sonra her saat bu kuralı piyasa özetine uygular, tutan adayları kasaya dokunmadan gölgede izler; sonuç performance.lab[id] altında. Koşul: [alan, op, değer]; alanlar px, ch24, ch4h, ch1h (%), atr1h (%), vr, rng (0..1), fund (%/8h), qvM (M USDT); BTC için "btc." öneki (ör. btc.ch1h). op: > >= < <= == !=. Bir listedeki koşulların hepsi tutmalı (VE). En fazla 6 aktif aday; elenen 4 aile (spike fade/follow, Bollinger ortalamaya dönüş, funding fade, SMC) tekrar eklenmez.',
+      'Laboratuvara yeni ADAY strateji ekler (kod gerekmez). hour_close bundan sonra her saat bu kuralı piyasa özetine uygular, tutan adayları kasaya dokunmadan gölgede izler; sonuç performance.lab[id] altında. Koşul: [alan, op, değer]; alanlar px, ch24, ch4h, ch1h (%), atr1h (%), vr, rng (0..1), fund (%/8h), qvM (M USDT), emaX (EMA9/21 kesişimi son 1h mumda: 1 yukarı, -1 aşağı, 0 yok), emaT (1 = EMA9 > EMA21, -1 tersi), allig (Alligator: 1 boğa dizilimi, -1 ayı, 0 karışık), bbp (Bollinger 20,2 %B; >1 üst bant üstü, <0 alt bant altı), bbw (bant genişliği %); BTC için "btc." öneki (ör. btc.ch1h). op: > >= < <= == !=. Bir listedeki koşulların hepsi tutmalı (VE). En fazla 10 aktif aday; elenen 4 aile (spike fade/follow, Bollinger ortalamaya dönüş, funding fade, SMC) tekrar eklenmez.',
     inputSchema: {
       type: 'object',
       required: ['id', 'desc', 'exit', 'hypothesis'],

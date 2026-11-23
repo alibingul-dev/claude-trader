@@ -179,6 +179,31 @@ const compactTrade = (t) => ({
   ...(t.square ? { square: t.square.ok ? t.square.url || 'ok' : t.square.skipped || `HATA ${t.square.code}` } : {}),
 });
 
+// ---------- indicators (1h, completed bars) ----------
+// emaX: EMA9/EMA21 cross on the last completed bar (1 up, -1 down, 0 none) · emaT: EMA9 > EMA21 ? 1 : -1
+// allig: Williams Alligator on median price (jaw SMMA13 >8, teeth SMMA8 >5, lips SMMA5 >3): 1 lips>teeth>jaw, -1 reverse, 0 mixed
+// bbp: Bollinger(20, 2) %B of the live price · bbw: band width, % of the middle band
+function emaSeries(xs, n) { const k = 2 / (n + 1); const out = [xs[0]]; for (let i = 1; i < xs.length; i++) out.push(xs[i] * k + out[i - 1] * (1 - k)); return out; }
+function smmaSeries(xs, n) { const out = []; let v = xs.slice(0, n).reduce((a, b) => a + b, 0) / n; for (let i = 0; i < xs.length; i++) { if (i >= n) v = (v * (n - 1) + xs[i]) / n; out.push(i >= n - 1 ? v : null); } return out; }
+function indicators(done, last) {
+  const cl = done.map((x) => +x[4]);
+  const n = cl.length;
+  if (n < 30) return {};
+  const e9 = emaSeries(cl, 9), e21 = emaSeries(cl, 21);
+  const up = e9[n - 1] > e21[n - 1], upPrev = e9[n - 2] > e21[n - 2];
+  const med = done.map((x) => (+x[2] + +x[3]) / 2);
+  const jaw = smmaSeries(med, 13)[n - 1 - 8], teeth = smmaSeries(med, 8)[n - 1 - 5], lips = smmaSeries(med, 5)[n - 1 - 3];
+  const w = cl.slice(-20), mid = w.reduce((a, b) => a + b, 0) / 20;
+  const sd = Math.sqrt(w.reduce((a, b) => a + (b - mid) ** 2, 0) / 20);
+  return {
+    emaX: up && !upPrev ? 1 : !up && upPrev ? -1 : 0,
+    emaT: up ? 1 : -1,
+    allig: lips > teeth && teeth > jaw ? 1 : lips < teeth && teeth < jaw ? -1 : 0,
+    bbp: sd ? rd((last - (mid - 2 * sd)) / (4 * sd), 2) : 0.5,
+    bbw: rd(((4 * sd) / mid) * 100, 2),
+  };
+}
+
 // ---------- market snapshot ----------
 async function snapshot() {
   const [tk, pr] = await Promise.all([bn.ticker24h(), bn.premiumAll()]);
@@ -191,7 +216,7 @@ async function snapshot() {
   const syms = ['BTCUSDT', ...cands.map((c) => c.symbol).filter((x) => x !== 'BTCUSDT')];
   return Promise.all(
     syms.map(async (sym) => {
-      const k = await bn.klines(sym, '1h', { limit: 26 });
+      const k = await bn.klines(sym, '1h', { limit: 61 });
       const done = k.slice(0, -1); // completed 1h bars
       const cl = done.map((x) => +x[4]);
       const last = +k[k.length - 1][4];
@@ -202,7 +227,9 @@ async function snapshot() {
         tr += Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc)) / pc;
       }
       const qv = done.map((x) => +x[7]);
-      const avgQv = qv.slice(0, -1).reduce((a, b) => a + b, 0) / (qv.length - 1);
+      const qv24 = qv.slice(-25, -1); // the 24 completed hours before the last one
+      const avgQv = qv24.reduce((a, b) => a + b, 0) / qv24.length;
+      const ind = indicators(done, last);
       const t = bySym.get(sym);
       const hi = +t.highPrice, lo = +t.lowPrice;
       return {
@@ -215,6 +242,7 @@ async function snapshot() {
         rng: rd(hi > lo ? (last - lo) / (hi - lo) : 0.5, 2),
         fund: rd(fund.get(sym) * 100, 4),
         qvM: rd(+t.quoteVolume / 1e6, 0),
+        ...ind,
       };
     })
   );
@@ -226,7 +254,7 @@ async function snapshot() {
 // versions run so far; the hourly run adds/retires candidates itself (add_lab_strategy / retire_lab_strategy).
 // Each hour every rule is evaluated; matches become shadow positions (never touch the wallet) tagged with every
 // strategy that supports them.
-const FIELDS = ['px', 'ch24', 'ch4h', 'ch1h', 'atr1h', 'vr', 'rng', 'fund', 'qvM'];
+const FIELDS = ['px', 'ch24', 'ch4h', 'ch1h', 'atr1h', 'vr', 'rng', 'fund', 'qvM', 'emaX', 'emaT', 'allig', 'bbp', 'bbw'];
 const OPS = { '>': (a, b) => a > b, '>=': (a, b) => a >= b, '<': (a, b) => a < b, '<=': (a, b) => a <= b, '==': (a, b) => a === b, '!=': (a, b) => a !== b };
 const MOM_L = [['ch24', '>', 0], ['ch4h', '>', 0], ['ch1h', '>', 0], ['rng', '>=', 0.7], ['vr', '>=', 1.3], ['fund', '<=', 0.05], ['btc.ch1h', '>', -0.5]];
 const MOM_S = [['ch24', '<', 0], ['ch4h', '<', 0], ['ch1h', '<', 0], ['rng', '<=', 0.3], ['vr', '>=', 1.3], ['fund', '>=', -0.05], ['btc.ch1h', '<', 0.5]];
@@ -242,7 +270,7 @@ const BUILTIN = [
   { id: 'L-btc', long: [...MOM_L, ['btc.ch1h', '>', 0]], short: [...MOM_S, ['btc.ch1h', '<', 0]], exit: EX_STD, cooldownH: 12,
     desc: 'v2 girişleri + BTC aynı yönde (LONG: BTC 1s > 0 %, SHORT: BTC 1s < 0 %)' },
 ];
-const MAX_CANDIDATES = 6; // active non-version candidates at once (multiple-testing guard)
+const MAX_CANDIDATES = 10; // active non-version candidates at once (multiple-testing guard)
 const exitKey = (e) => `${e.sl_atr_k}|${e.sl_min}|${e.sl_max}|${e.tp_mult}|${e.max_hold_h}` + (e.sl_mode === 'close5' ? `|c5x${e.hard_mult}` : '');
 const LEGACY_EXIT = { STD: exitKey(EX_STD), WIDE: exitKey(EX_WIDE) };
 const posExitKey = (p) => p.exitKey || LEGACY_EXIT[p.exitKind || 'STD'];
@@ -405,7 +433,7 @@ async function hourClose() {
     skipped_closed_this_hour: skippedClosed.map(compactTrade),
     skipped_open: (await db.list('spos')).map(compactPos),
     lab_new_this_hour: labNew,
-    market_keys: 'px USDT · ch24/ch4h/ch1h % · atr1h % (14x1h) · vr = son 1h hacim / 24h ort · rng 0..1 = 24h aralıktaki yeri · fund % / 8h · qvM M USDT',
+    market_keys: 'px USDT · ch24/ch4h/ch1h % · atr1h % (14x1h) · vr = son 1h hacim / 24h ort · rng 0..1 = 24h aralıktaki yeri · fund % / 8h · qvM M USDT · emaX EMA9/21 kesişimi son kapanan 1h mumda (1 yukarı, -1 aşağı, 0 yok) · emaT 1 = EMA9 > EMA21 · allig Alligator dizilimi (1 boğa, -1 ayı, 0 karışık) · bbp Bollinger(20,2) %B · bbw bant genişliği %',
     market,
   };
 }
@@ -628,5 +656,5 @@ async function dashboardData() {
 module.exports = {
   hourClose, openPosition, skipPosition, closePosition, performance, logDecision, setStrategy, getStrategy, dashboardData,
   addLabStrategy, retireLabStrategy,
-  _test: { replay, leverageFor, notionalFor, CFG, labSupports, BUILTIN, checkConds, exitArgs },
+  _test: { replay, leverageFor, notionalFor, CFG, labSupports, BUILTIN, checkConds, exitArgs, indicators },
 };
